@@ -94,9 +94,13 @@ table td {
 # --- INICIALIZACIÓN DE LA BASE DE DATOS SQLITE ---
 DB_NAME = "flipping_multiproyecto.db"
 
+from sqlalchemy import create_engine
+
 def init_db():
-    conn = sqlite3.connect(DB_NAME)
-    cursor = conn.cursor()
+    # Lee la URL segura desde los secretos de Streamlit Cloud
+    db_url = st.secrets["postgres"]["url"]
+    engine = create_engine(db_url)
+    return engine
     
     # 1. Tabla de Proyectos
     cursor.execute("""
