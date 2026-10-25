@@ -94,11 +94,15 @@ table td {
 # --- INICIALIZACIÓN DE LA BASE DE DATOS SQLITE ---
 DB_NAME = "flipping_multiproyecto.db"
 
-from sqlalchemy import create_engine
-
 def init_db():
-    # Lee la URL segura desde los secretos de Streamlit Cloud
     db_url = st.secrets["postgres"]["url"]
+    
+    # Aseguramos que use psycopg2 explícitamente en la URL
+    if db_url.startswith("postgres://"):
+        db_url = db_url.replace("postgres://", "postgresql+psycopg2://", 1)
+    elif db_url.startswith("postgresql://"):
+        db_url = db_url.replace("postgresql://", "postgresql+psycopg2://", 1)
+        
     engine = create_engine(db_url)
     return engine
     
