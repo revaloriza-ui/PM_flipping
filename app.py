@@ -374,11 +374,26 @@ def hacer_backup_drive():
     try:
         gdrive_secrets = st.secrets["google_drive"]
         
-        # Parseamos directamente el texto JSON completo que guardamos en los secrets
-        creds_dict = json.loads(gdrive_secrets["json_info"])
+        # Limpiamos y formateamos correctamente los saltos de línea de la clave privada
+        raw_key = gdrive_secrets["private_key"]
+        formatted_key = raw_key.replace("\\n", "\n")
+        
+        credentials_info = {
+            "type": "service_account",
+            "project_id": "pm-flipping-backup",
+            "private_key_id": "632234b40217f46df7adcdd014ef65b636ab09ad",
+            "private_key": formatted_key,
+            "client_email": gdrive_secrets["client_email"],
+            "client_id": "103287396645637093815",
+            "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+            "token_uri": "https://oauth2.googleapis.com/token",
+            "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
+            "client_x509_cert_url": f"https://www.googleapis.com/robot/v1/metadata/x509/{gdrive_secrets['client_email'].replace('@', '%40')}",
+            "universe_domain": "googleapis.com"
+        }
         
         creds = service_account.Credentials.from_service_account_info(
-            creds_dict, scopes=['https://www.googleapis.com/auth/drive.file']
+            credentials_info, scopes=['https://www.googleapis.com/auth/drive.file']
         )
         
         service = build('drive', 'v3', credentials=creds)
