@@ -96,8 +96,13 @@ DB_NAME = "flipping_multiproyecto.db"
 
 # --- CONEXIÓN A SUPABASE CON STREAMLIT ---
 def init_db():
-    # Streamlit se encarga de todo el motor y la conexión por detrás
-    conn = st.connection("postgres", type="sql", url=st.secrets["postgres"]["url"])
+    # Le pasamos el parámetro dialect="postgresql+psycopg2" para que no busque la otra librería
+    conn = st.connection(
+        "postgres", 
+        type="sql", 
+        url=st.secrets["postgres"]["url"],
+        dialect="postgresql+psycopg2"
+    )
     return conn
     
     # 1. Tabla de Proyectos
