@@ -1,8 +1,12 @@
 from datetime import datetime
+import io
 import sqlite3
 import pandas as pd
 import plotly.express as px
 import streamlit as st
+from google.oauth2 import service_account
+from googleapiclient.discovery import build
+from googleapiclient.http import MediaIoBaseUpload
 
 # --- CONFIGURACIÓN DE PÁGINA Y ESTILOS CSS UNIFICADOS (ESTILO REVALORIZA) ---
 st.set_page_config(
@@ -91,178 +95,21 @@ table td {
 </style>  
 """, unsafe_allow_html=True)
 
-# --- INICIALIZACIÓN DE LA BASE DE DATOS SQLITE ---
-DB_NAME = "flipping_multiproyecto.db"
-
-# --- CONEXIÓN A SUPABASE CON STREAMLIT ---
-import streamlit as st
-import requests
-
 # --- CONEXIÓN DIRECTA Y SEGURA A SUPABASE ---
 def init_db():
-    # Creamos un objeto de conexión compatible con tus consultas
     return st.secrets["postgres"]["url"]
-    
-    # 1. Tabla de Proyectos
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS proyectos (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            nombre TEXT UNIQUE NOT NULL,
-            cliente TEXT,
-            superficie_total REAL,
-            precio_compra INTEGER,
-            presupuesto_reforma INTEGER,
-            precio_objetivo INTEGER
-        )
-    """)
-    
-    # 2. Tabla de Proveedores
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS proveedores (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            nombre TEXT UNIQUE NOT NULL,
-            rubro_principal TEXT,
-            contacto TEXT
-        )
-    """)
-    
-    # 3. Tabla de Rubros
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS rubros (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            nombre TEXT UNIQUE NOT NULL
-        )
-    """)
-    
-    # 4. Tabla de Medios de Pago (ABM)
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS medios_pago (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            nombre TEXT UNIQUE NOT NULL,
-            tipo TEXT,
-            detalle TEXT
-        )
-    """)
-    
-    # 5. Tabla de Presupuestos por Rubro
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS presupuestos_rubro (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            proyecto_id INTEGER,
-            rubro TEXT,
-            ambiente TEXT,
-            proveedor TEXT,
-            concepto TEXT,
-            moneda TEXT,
-            monto_presupuestado INTEGER,
-            FOREIGN KEY(proyecto_id) REFERENCES proyectos(id)
-        )
-    """)
-    
-    # 6. Tabla de Pagos
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS pagos (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            proyecto_id INTEGER,
-            presupuesto_id INTEGER,
-            fecha TEXT,
-            comprobante TEXT,
-            tipo_gasto TEXT,
-            medio_pago TEXT,
-            cuotas INTEGER,
-            rubro TEXT,
-            ambiente TEXT,
-            proveedor TEXT,
-            concepto TEXT,
-            monto_ars INTEGER,
-            tipo_cambio INTEGER,
-            monto_usd INTEGER,
-            FOREIGN KEY(proyecto_id) REFERENCES proyectos(id),
-            FOREIGN KEY(presupuesto_id) REFERENCES presupuestos_rubro(id)
-        )
-    """)
-    
-    # 7. Tabla de Especificaciones / Bitácora Técnica
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS especificaciones (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            proyecto_id INTEGER,
-            pago_id INTEGER,
-            rubro TEXT,
-            ambiente TEXT,
-            proveedor TEXT,
-            producto_concepto TEXT,
-            detalles_tecnicos TEXT,
-            FOREIGN KEY(proyecto_id) REFERENCES proyectos(id),
-            FOREIGN KEY(pago_id) REFERENCES pagos(id)
-        )
-    """)
-    
-    conn.commit()
-    
-    # Insertar proyecto inicial por defecto (Coronel Díaz)
-    cursor.execute("SELECT COUNT(*) FROM proyectos")
-    if cursor.fetchone()[0] == 0:
-        cursor.execute("""
-            INSERT INTO proyectos (id, nombre, cliente, superficie_total, precio_compra, presupuesto_reforma, precio_objetivo) 
-            VALUES (1, 'Coronel Díaz 2109 5° A', 'Verona', 137, 350000, 90000, 580000)
-        """)
-        conn.commit()
-        
-    # Rubros iniciales
-    cursor.execute("SELECT COUNT(*) FROM rubros")
-    if cursor.fetchone()[0] == 0:
-        rubros_iniciales = [
-            "Demolición y Albañilería",
-            "Instalaciones (Termomecánica/Sanitarios)",
-            "Electricidad y Domótica",
-            "Carpintería A30 y Puertas",
-            "Pisos y Revestimientos",
-            "Amoblamientos de Cocina y Placards",
-        ]
-        for r in rubros_iniciales:
-            cursor.execute("INSERT OR IGNORE INTO rubros (nombre) VALUES (?)", (r,))
-        conn.commit()
-        
-    # Proveedores iniciales
-    cursor.execute("SELECT COUNT(*) FROM proveedores")
-    if cursor.fetchone()[0] == 0:
-        prov_iniciales = [
-            ("SBG", "Pisos y Revestimientos", "Local Comercial"),
-            ("Egger", "Amoblamientos", "Fábrica"),
-            ("Aluar", "Aberturas", "Distribuidor"),
-        ]
-        for p, r, c in prov_iniciales:
-            cursor.execute("INSERT OR IGNORE INTO proveedores (nombre, rubro_principal, contacto) VALUES (?, ?, ?)", (p, r, c))
-        conn.commit()
-        
-    # Medios de pago iniciales
-    cursor.execute("SELECT COUNT(*) FROM medios_pago")
-    if cursor.fetchone()[0] == 0:
-        medios_iniciales = [
-            ("Efectivo USD", "Efectivo", "Caja fuerte"),
-            ("Transferencia Banco Galicia", "Transferencia", "Cuenta Corriente ARS"),
-            ("Visa Galicia (Principal)", "Tarjeta de Crédito", "Cierre día 20"),
-            ("Mastercard BBVA", "Tarjeta de Crédito", "Cierre día 15"),
-            ("Cheque propio", "Cheque", "Banco Galicia"),
-        ]
-        for m, t, d in medios_iniciales:
-            cursor.execute("INSERT OR IGNORE INTO medios_pago (nombre, tipo, detalle) VALUES (?, ?, ?)", (m, t, d))
-        conn.commit()
-        
-    conn.close()
 
 init_db()
 
 # --- FUNCIONES DE BASE DE DATOS ---
 def get_proyectos():
-    conn = sqlite3.connect(DB_NAME)
+    conn = sqlite3.connect("flipping_multiproyecto.db")
     df = pd.read_sql("SELECT * FROM proyectos", conn)
     conn.close()
     return df
 
 def agregar_proyecto(nombre, cliente, superficie_total, precio_compra, presupuesto_reforma, precio_objetivo):
-    conn = sqlite3.connect(DB_NAME)
+    conn = sqlite3.connect("flipping_multiproyecto.db")
     cursor = conn.cursor()
     try:
         cursor.execute("""
@@ -277,7 +124,7 @@ def agregar_proyecto(nombre, cliente, superficie_total, precio_compra, presupues
     return exito
 
 def actualizar_proyecto(p_id, nombre, cliente, superficie_total, precio_compra, presupuesto_reforma, precio_objetivo):
-    conn = sqlite3.connect(DB_NAME)
+    conn = sqlite3.connect("flipping_multiproyecto.db")
     cursor = conn.cursor()
     cursor.execute("""
         UPDATE proyectos SET nombre = ?, cliente = ?, superficie_total = ?, precio_compra = ?, presupuesto_reforma = ?, precio_objetivo = ? 
@@ -287,26 +134,26 @@ def actualizar_proyecto(p_id, nombre, cliente, superficie_total, precio_compra, 
     conn.close()
 
 def eliminar_proyecto(p_id):
-    conn = sqlite3.connect(DB_NAME)
+    conn = sqlite3.connect("flipping_multiproyecto.db")
     cursor = conn.cursor()
     cursor.execute("DELETE FROM proyectos WHERE id = ?", (p_id,))
     conn.commit()
     conn.close()
 
 def get_proveedores():
-    conn = sqlite3.connect(DB_NAME)
+    conn = sqlite3.connect("flipping_multiproyecto.db")
     df = pd.read_sql("SELECT * FROM proveedores", conn)
     conn.close()
     return df["nombre"].tolist()
 
 def get_proveedores_df():
-    conn = sqlite3.connect(DB_NAME)
+    conn = sqlite3.connect("flipping_multiproyecto.db")
     df = pd.read_sql("SELECT * FROM proveedores", conn)
     conn.close()
     return df
 
 def agregar_proveedor(nombre, rubro, contacto):
-    conn = sqlite3.connect(DB_NAME)
+    conn = sqlite3.connect("flipping_multiproyecto.db")
     cursor = conn.cursor()
     try:
         cursor.execute("INSERT INTO proveedores (nombre, rubro_principal, contacto) VALUES (?, ?, ?)", (nombre, rubro, contacto))
@@ -318,7 +165,7 @@ def agregar_proveedor(nombre, rubro, contacto):
     return exito
 
 def actualizar_proveedor(prov_id, nombre, rubro, contacto):
-    conn = sqlite3.connect(DB_NAME)
+    conn = sqlite3.connect("flipping_multiproyecto.db")
     cursor = conn.cursor()
     cursor.execute("""
         UPDATE proveedores SET nombre = ?, rubro_principal = ?, contacto = ? WHERE id = ?
@@ -327,26 +174,26 @@ def actualizar_proveedor(prov_id, nombre, rubro, contacto):
     conn.close()
 
 def eliminar_proveedor(prov_id):
-    conn = sqlite3.connect(DB_NAME)
+    conn = sqlite3.connect("flipping_multiproyecto.db")
     cursor = conn.cursor()
     cursor.execute("DELETE FROM proveedores WHERE id = ?", (prov_id,))
     conn.commit()
     conn.close()
 
 def get_rubros():
-    conn = sqlite3.connect(DB_NAME)
+    conn = sqlite3.connect("flipping_multiproyecto.db")
     df = pd.read_sql("SELECT * FROM rubros", conn)
     conn.close()
     return df["nombre"].tolist()
 
 def get_rubros_df():
-    conn = sqlite3.connect(DB_NAME)
+    conn = sqlite3.connect("flipping_multiproyecto.db")
     df = pd.read_sql("SELECT * FROM rubros", conn)
     conn.close()
     return df
 
 def agregar_rubro(nuevo_rubro):
-    conn = sqlite3.connect(DB_NAME)
+    conn = sqlite3.connect("flipping_multiproyecto.db")
     cursor = conn.cursor()
     try:
         cursor.execute("INSERT INTO rubros (nombre) VALUES (?)", (nuevo_rubro,))
@@ -358,7 +205,7 @@ def agregar_rubro(nuevo_rubro):
     return exito
 
 def actualizar_rubro(rubro_id, nuevo_nombre):
-    conn = sqlite3.connect(DB_NAME)
+    conn = sqlite3.connect("flipping_multiproyecto.db")
     cursor = conn.cursor()
     try:
         cursor.execute("UPDATE rubros SET nombre = ? WHERE id = ?", (nuevo_nombre, rubro_id))
@@ -370,26 +217,26 @@ def actualizar_rubro(rubro_id, nuevo_nombre):
     return exito
 
 def eliminar_rubro(rubro_id):
-    conn = sqlite3.connect(DB_NAME)
+    conn = sqlite3.connect("flipping_multiproyecto.db")
     cursor = conn.cursor()
     cursor.execute("DELETE FROM rubros WHERE id = ?", (rubro_id,))
     conn.commit()
     conn.close()
 
 def get_medios_pago():
-    conn = sqlite3.connect(DB_NAME)
+    conn = sqlite3.connect("flipping_multiproyecto.db")
     df = pd.read_sql("SELECT * FROM medios_pago", conn)
     conn.close()
     return df["nombre"].tolist()
 
 def get_medios_pago_df():
-    conn = sqlite3.connect(DB_NAME)
+    conn = sqlite3.connect("flipping_multiproyecto.db")
     df = pd.read_sql("SELECT * FROM medios_pago", conn)
     conn.close()
     return df
 
 def agregar_medio_pago(nombre, tipo, detalle):
-    conn = sqlite3.connect(DB_NAME)
+    conn = sqlite3.connect("flipping_multiproyecto.db")
     cursor = conn.cursor()
     try:
         cursor.execute("INSERT INTO medios_pago (nombre, tipo, detalle) VALUES (?, ?, ?)", (nombre, tipo, detalle))
@@ -401,7 +248,7 @@ def agregar_medio_pago(nombre, tipo, detalle):
     return exito
 
 def actualizar_medio_pago(mp_id, nombre, tipo, detalle):
-    conn = sqlite3.connect(DB_NAME)
+    conn = sqlite3.connect("flipping_multiproyecto.db")
     cursor = conn.cursor()
     cursor.execute("""
         UPDATE medios_pago SET nombre = ?, tipo = ?, detalle = ? WHERE id = ?
@@ -410,21 +257,21 @@ def actualizar_medio_pago(mp_id, nombre, tipo, detalle):
     conn.close()
 
 def eliminar_medio_pago(mp_id):
-    conn = sqlite3.connect(DB_NAME)
+    conn = sqlite3.connect("flipping_multiproyecto.db")
     cursor = conn.cursor()
     cursor.execute("DELETE FROM medios_pago WHERE id = ?", (mp_id,))
     conn.commit()
     conn.close()
 
 def get_pagos(proyecto_id):
-    conn = sqlite3.connect(DB_NAME)
+    conn = sqlite3.connect("flipping_multiproyecto.db")
     df = pd.read_sql("SELECT * FROM pagos WHERE proyecto_id = ?", conn, params=(proyecto_id,))
     conn.close()
     return df
 
 def agregar_pago(proyecto_id, presupuesto_id, fecha, comprobante, tipo_gasto, medio_pago, cuotas, rubro, ambiente, proveedor, concepto, monto_ars, tipo_cambio):
     monto_usd = int(monto_ars / tipo_cambio) if tipo_cambio > 0 else 0
-    conn = sqlite3.connect(DB_NAME)
+    conn = sqlite3.connect("flipping_multiproyecto.db")
     cursor = conn.cursor()
     cursor.execute("""
         INSERT INTO pagos (proyecto_id, presupuesto_id, fecha, comprobante, tipo_gasto, medio_pago, cuotas, rubro, ambiente, proveedor, concepto, monto_ars, tipo_cambio, monto_usd) 
@@ -442,7 +289,7 @@ def agregar_pago(proyecto_id, presupuesto_id, fecha, comprobante, tipo_gasto, me
     conn.close()
 
 def eliminar_pago(pago_id):
-    conn = sqlite3.connect(DB_NAME)
+    conn = sqlite3.connect("flipping_multiproyecto.db")
     cursor = conn.cursor()
     cursor.execute("DELETE FROM especificaciones WHERE pago_id = ?", (pago_id,))
     cursor.execute("DELETE FROM pagos WHERE id = ?", (pago_id,))
@@ -451,7 +298,7 @@ def eliminar_pago(pago_id):
 
 def actualizar_pago_completo(pago_id, presupuesto_id, fecha, comprobante, tipo_gasto, medio_pago, cuotas, rubro, ambiente, proveedor, concepto, monto_ars, tipo_cambio):
     monto_usd = int(monto_ars / tipo_cambio) if tipo_cambio > 0 else 0
-    conn = sqlite3.connect(DB_NAME)
+    conn = sqlite3.connect("flipping_multiproyecto.db")
     cursor = conn.cursor()
     cursor.execute("""
         UPDATE pagos SET presupuesto_id = ?, fecha = ?, comprobante = ?, tipo_gasto = ?, medio_pago = ?, cuotas = ?, rubro = ?, ambiente = ?, proveedor = ?, concepto = ?, monto_ars = ?, tipo_cambio = ?, monto_usd = ? 
@@ -472,15 +319,14 @@ def actualizar_pago_completo(pago_id, presupuesto_id, fecha, comprobante, tipo_g
     conn.commit()
     conn.close()
 
-# Funciones para Presupuesto
 def get_presupuestos(proyecto_id):
-    conn = sqlite3.connect(DB_NAME)
+    conn = sqlite3.connect("flipping_multiproyecto.db")
     df = pd.read_sql("SELECT * FROM presupuestos_rubro WHERE proyecto_id = ?", conn, params=(proyecto_id,))
     conn.close()
     return df
 
 def guardar_presupuesto_rubro(proyecto_id, rubro, ambiente, proveedor, concepto, moneda, monto_presupuestado):
-    conn = sqlite3.connect(DB_NAME)
+    conn = sqlite3.connect("flipping_multiproyecto.db")
     cursor = conn.cursor()
     cursor.execute("""
         INSERT INTO presupuestos_rubro (proyecto_id, rubro, ambiente, proveedor, concepto, moneda, monto_presupuestado) 
@@ -490,7 +336,7 @@ def guardar_presupuesto_rubro(proyecto_id, rubro, ambiente, proveedor, concepto,
     conn.close()
 
 def actualizar_presupuesto(ppto_id, rubro, ambiente, proveedor, concepto, moneda, monto_presupuestado):
-    conn = sqlite3.connect(DB_NAME)
+    conn = sqlite3.connect("flipping_multiproyecto.db")
     cursor = conn.cursor()
     cursor.execute("""
         UPDATE presupuestos_rubro SET rubro = ?, ambiente = ?, proveedor = ?, concepto = ?, moneda = ?, monto_presupuestado = ? 
@@ -500,27 +346,73 @@ def actualizar_presupuesto(ppto_id, rubro, ambiente, proveedor, concepto, moneda
     conn.close()
 
 def eliminar_presupuesto(ppto_id):
-    conn = sqlite3.connect(DB_NAME)
+    conn = sqlite3.connect("flipping_multiproyecto.db")
     cursor = conn.cursor()
     cursor.execute("DELETE FROM presupuestos_rubro WHERE id = ?", (ppto_id,))
     conn.commit()
     conn.close()
 
-# Funciones para Especificaciones / Bitácora Técnica
 def get_especificaciones(proyecto_id):
-    conn = sqlite3.connect(DB_NAME)
+    conn = sqlite3.connect("flipping_multiproyecto.db")
     df = pd.read_sql("SELECT * FROM especificaciones WHERE proyecto_id = ?", conn, params=(proyecto_id,))
     conn.close()
     return df
 
 def actualizar_detalle_especificacion(esp_id, nuevos_detalles):
-    conn = sqlite3.connect(DB_NAME)
+    conn = sqlite3.connect("flipping_multiproyecto.db")
     cursor = conn.cursor()
     cursor.execute("""
         UPDATE especificaciones SET detalles_tecnicos = ? WHERE id = ?
     """, (nuevos_detalles, esp_id))
     conn.commit()
     conn.close()
+
+# --- FUNCIÓN DE RESPALDO AUTOMÁTICO EN GOOGLE DRIVE ---
+def hacer_backup_drive():
+    try:
+        gdrive_secrets = st.secrets["google_drive"]
+        
+        credentials_info = {
+            "type": "service_account",
+            "project_id": "pm-flipping-backup",
+            "private_key_id": "auto",
+            "private_key": gdrive_secrets["private_key"],
+            "client_email": gdrive_secrets["client_email"],
+            "client_id": "auto",
+            "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+            "token_uri": "https://oauth2.googleapis.com/token",
+            "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
+            "client_x509_cert_url": f"https://www.googleapis.com/robot/v1/metadata/x509/{gdrive_secrets['client_email']}"
+        }
+        
+        creds = service_account.Credentials.from_service_account_info(
+            credentials_info, scopes=['https://www.googleapis.com/auth/drive.file']
+        )
+        
+        service = build('drive', 'v3', credentials=creds)
+        
+        contenido_backup = f"Respaldo automático PM Flipping - Fecha: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
+        file_metadata = {
+            'name': f'backup_pm_flipping_{datetime.now().strftime("%Y%m%d_%H%M%S")}.txt',
+            'parents': [gdrive_secrets["folder_id"]]
+        }
+        
+        media = MediaIoBaseUpload(
+            io.BytesIO(contenido_backup.encode('utf-8')),
+            mimetype='text/plain',
+            resumable=True
+        )
+        
+        service.files().create(
+            body=file_metadata,
+            media_body=media,
+            fields='id'
+        ).execute()
+        
+        return True
+    except Exception as e:
+        st.error(f"Error al realizar el backup: {e}")
+        return False
 
 # --- BARRA LATERAL: SELECCIÓN DE PROYECTO Y ACCESO ---
 st.sidebar.header("🏢 Selector de Proyecto (ID)")
@@ -557,11 +449,17 @@ st.sidebar.metric("CapEx Ejecutado Real", f"${total_ejecutado:,} USD".replace(",
 st.sidebar.metric("Profit Estimado", f"${profit_est:,} USD".replace(",", "."))
 st.sidebar.metric("ROI Neto Proyectado", f"{roi_est}%")
 
+# Botón de Respaldo en Google Drive en la Barra Lateral
+st.sidebar.markdown("---")
+st.sidebar.header("💾 Respaldo en la Nube")
+if st.sidebar.button("Hacer Backup en Google Drive"):
+    if hacer_backup_drive():
+        st.sidebar.success("¡Respaldo subido a Google Drive con éxito!")
+
 # --- INTERFAZ PRINCIPAL ---
 st.title(f"🏗️ Panel Gerencial: {proyecto_info['nombre']}")
 st.caption(f"Cliente / Inversor: {proyecto_info['cliente']} | Superficie: {sup_total} m²")
 
-# Definición de Pestañas según el Perfil (Admin vs Cliente)
 if perfil == "Project Manager (Admin)":
     tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab9, tab10 = st.tabs([
         "💳 Registro de Pagos", "📐 Especificaciones", "📊 Módulo de Reportes", 
@@ -572,10 +470,6 @@ else:
     tab_cli_1, tab_cli_2, tab_cli_3, tab_cli_4 = st.tabs([
         "📐 Especificaciones", "📊 Módulo de Reportes", "📈 Panel Financiero", "🚀 Escenarios Venta"
     ])
-
-# ==========================================
-# MÓDULOS REPLICADOS (IDÉNTICOS PARA AMBOS PERFILES)
-# ==========================================
 
 def render_especificaciones_tab():
     st.subheader("📐 Especificaciones y Bitácora Técnica (Catálogo de Materiales)")
@@ -619,7 +513,6 @@ def render_reportes_tab():
         "📈 Presupuesto vs. Real", "💳 Exposición por Medio de Pago", "📅 Cash Flow de Cuotas", "🚨 Control de Desviaciones"
     ])
     
-    # --- REPORTE 1: PRESUPUESTO VS REAL ---
     with rep_tab1:
         st.markdown("### 📈 Reporte Detallado: Presupuesto vs. Real")
         df_ppto_rep = get_presupuestos(proyecto_id_activo)
@@ -735,7 +628,6 @@ def render_reportes_tab():
         else:
             st.info("No hay presupuestos cargados para este proyecto.")
 
-    # --- REPORTE 2: EXPOSICIÓN POR MEDIO DE PAGO ---
     with rep_tab2:
         st.markdown("### 💳 Exposición Consolidada por Medio de Pago / Tarjeta")
         df_pagos_rep = get_pagos(proyecto_id_activo)
@@ -788,7 +680,6 @@ def render_reportes_tab():
         else:
             st.info("No hay pagos registrados para analizar.")
 
-    # --- REPORTE 3: CASH FLOW DE CUOTAS ---
     with rep_tab3:
         st.markdown("### 📅 Proyección de Cash Flow y Vencimientos de Cuotas")
         df_pagos_rep = get_pagos(proyecto_id_activo)
@@ -808,7 +699,6 @@ def render_reportes_tab():
         else:
             st.info("No hay pagos registrados para proyectar cuotas.")
 
-    # --- REPORTE 4: CONTROL DE DESVIACIONES ---
     with rep_tab4:
         st.markdown("### 🚨 Control de Desviaciones por Partida (Alerta Temprana)")
         df_ppto_check = get_presupuestos(proyecto_id_activo)
@@ -869,7 +759,6 @@ def render_panel_financiero():
         
         colores_pasteles = ["#94B3FD", "#B9E4C9", "#FCE38A", "#F38181", "#E2D7F7", "#FFD166", "#A0C4FF", "#CAFFBF"]
         
-        # --- 1. DISTRIBUCIÓN POR RUBRO ---
         with fin_tab_rubro:
             st.markdown("### 📂 Análisis de Gastos por Rubro de Obra")
             df_rubro_agg = df_pagos_fin.groupby("rubro")[["monto_usd", "monto_ars"]].sum().reset_index()
@@ -899,7 +788,6 @@ def render_panel_financiero():
             st.dataframe(df_rubro_table, use_container_width=True)
             st.markdown(f"**TOTALES GENERALES:** 💵 **${int(total_rubro_ars):,} ARS** | 💲 **${int(total_rubro_usd):,} USD**".replace(",", "."), unsafe_allow_html=True)
             
-        # --- 2. DISTRIBUCIÓN POR AMBIENTE ---
         with fin_tab_ambiente:
             st.markdown("### 🏠 Análisis de Gastos por Ambiente")
             df_amb_agg = df_pagos_fin.groupby("ambiente")[["monto_usd", "monto_ars"]].sum().reset_index()
@@ -1085,9 +973,6 @@ def render_escenarios_venta():
     * **Diferencia de Mercado (%):** [(Valor de Venta Ingresado - Valor de Mercado Total) / Valor de Mercado Total] × 100
     """, unsafe_allow_html=True)
 
-# ==========================================
-# RENDERIZADO DE VISTAS (ADMIN VS CLIENTE)
-# ==========================================
 if perfil == "Project Manager (Admin)":
     with tab1:
         st.subheader("➕ Cargar Nuevo Gasto / Pago")
@@ -1570,9 +1455,6 @@ if perfil == "Project Manager (Admin)":
         render_escenarios_venta()
 
 else:
-    # ==========================================
-    # VISTA INVERSORA / CLIENTE
-    # ==========================================
     with tab_cli_1:
         render_especificaciones_tab()
     with tab_cli_2:
