@@ -94,18 +94,11 @@ table td {
 # --- INICIALIZACIÓN DE LA BASE DE DATOS SQLITE ---
 DB_NAME = "flipping_multiproyecto.db"
 
+# --- CONEXIÓN A SUPABASE CON STREAMLIT ---
 def init_db():
-    db_url = st.secrets["postgres"]["url"]
-    
-    # Aseguramos el prefijo correcto para PostgreSQL con psycopg2
-    if db_url.startswith("postgres://"):
-        db_url = db_url.replace("postgres://", "postgresql+psycopg2://", 1)
-    elif db_url.startswith("postgresql://") and not "postgresql+psycopg2://" in db_url:
-        db_url = db_url.replace("postgresql://", "postgresql+psycopg2://", 1)
-        
-    # Agregamos connect_args por seguridad para conexiones remotas
-    engine = create_engine(db_url, pool_pre_ping=True)
-    return engine
+    # Streamlit se encarga de todo el motor y la conexión por detrás
+    conn = st.connection("postgres", type="sql", url=st.secrets["postgres"]["url"])
+    return conn
     
     # 1. Tabla de Proyectos
     cursor.execute("""
