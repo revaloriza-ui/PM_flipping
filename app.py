@@ -368,25 +368,17 @@ def actualizar_detalle_especificacion(esp_id, nuevos_detalles):
     conn.close()
 
 # --- FUNCIÓN DE RESPALDO AUTOMÁTICO EN GOOGLE DRIVE ---
+import json
+
 def hacer_backup_drive():
     try:
         gdrive_secrets = st.secrets["google_drive"]
         
-        credentials_info = {
-            "type": "service_account",
-            "project_id": "pm-flipping-backup",
-            "private_key_id": "auto",
-            "private_key": gdrive_secrets["private_key"],
-            "client_email": gdrive_secrets["client_email"],
-            "client_id": "auto",
-            "auth_uri": "https://accounts.google.com/o/oauth2/auth",
-            "token_uri": "https://oauth2.googleapis.com/token",
-            "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
-            "client_x509_cert_url": f"https://www.googleapis.com/robot/v1/metadata/x509/{gdrive_secrets['client_email']}"
-        }
+        # Parseamos directamente el texto JSON completo que guardamos en los secrets
+        creds_dict = json.loads(gdrive_secrets["json_info"])
         
         creds = service_account.Credentials.from_service_account_info(
-            credentials_info, scopes=['https://www.googleapis.com/auth/drive.file']
+            creds_dict, scopes=['https://www.googleapis.com/auth/drive.file']
         )
         
         service = build('drive', 'v3', credentials=creds)
