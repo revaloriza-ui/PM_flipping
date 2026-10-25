@@ -97,13 +97,14 @@ DB_NAME = "flipping_multiproyecto.db"
 def init_db():
     db_url = st.secrets["postgres"]["url"]
     
-    # Aseguramos que use psycopg2 explícitamente en la URL
+    # Aseguramos el prefijo correcto para PostgreSQL con psycopg2
     if db_url.startswith("postgres://"):
         db_url = db_url.replace("postgres://", "postgresql+psycopg2://", 1)
-    elif db_url.startswith("postgresql://"):
+    elif db_url.startswith("postgresql://") and not "postgresql+psycopg2://" in db_url:
         db_url = db_url.replace("postgresql://", "postgresql+psycopg2://", 1)
         
-    engine = create_engine(db_url)
+    # Agregamos connect_args por seguridad para conexiones remotas
+    engine = create_engine(db_url, pool_pre_ping=True)
     return engine
     
     # 1. Tabla de Proyectos
