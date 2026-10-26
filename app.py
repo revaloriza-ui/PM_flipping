@@ -560,8 +560,14 @@ st.sidebar.metric("ROI Neto Proyectado", f"{roi_est}%")
 def hacer_backup_drive():
     try:
         gdrive_secrets = st.secrets["google_drive"]
-        formatted_key = gdrive_secrets["private_key"].replace("\\n", "\n")
         
+        # Limpieza robusta de la clave privada para evitar errores PEM
+        raw_key = gdrive_secrets["private_key"]
+        if "-----BEGIN PRIVATE KEY-----" in raw_key:
+            formatted_key = raw_key.replace("\\n", "\n")
+        else:
+            formatted_key = raw_key
+            
         credentials_info = {
             "type": "service_account",
             "project_id": "pm-flipping-backup",
