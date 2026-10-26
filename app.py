@@ -95,33 +95,217 @@ table td {
 </style>  
 """, unsafe_allow_html=True)
 
-# --- CONEXIÓN DIRECTA Y SEGURA A SUPABASE ---
+# --- INICIALIZACIÓN DE LA BASE DE DATOS SQLITE ---
+DB_NAME = "flipping_multiproyecto.db"
+
 def init_db():
-    return st.secrets["postgres"]["url"]
+    conn = sqlite3.connect(DB_NAME)
+    cursor = conn.cursor()
+    
+    # 1. Tabla de Proyectos
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS proyectos (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            nombre TEXT UNIQUE NOT NULL,
+            cliente TEXT,
+            superficie_total REAL,
+            precio_compra INTEGER,
+            presupuesto_reforma INTEGER,
+            precio_objetivo INTEGER
+        )
+    """)
+    
+    # 2. Tabla de Proveedores
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS proveedores (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            nombre TEXT UNIQUE NOT NULL,
+            rubro_principal TEXT,
+            contacto TEXT
+        )
+    """)
+    
+    # 3. Tabla de Rubros
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS rubros (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            nombre TEXT UNIQUE NOT NULL
+        )
+    """)
+    
+    # 4. Tabla de Medios de Pago (ABM)
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS medios_pago (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            nombre TEXT UNIQUE NOT NULL,
+            tipo TEXT,
+            detalle TEXT
+        )
+    """)
+    
+    # 5. Tabla de Presupuestos por Rubro
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS presupuestos_rubro (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            proyecto_id INTEGER,
+            rubro TEXT,
+            ambiente TEXT,
+            proveedor TEXT,
+            concepto TEXT,
+            moneda TEXT,
+            monto_presupuestado INTEGER,
+            FOREIGN KEY(proyecto_id) REFERENCES proyectos(id)
+        )
+    """)
+    
+    # 6. Tabla de Pagos
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS pagos (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            proyecto_id INTEGER,
+            presupuesto_id INTEGER,
+            fecha TEXT,
+            comprobante TEXT,
+            tipo_gasto TEXT,
+            medio_pago TEXT,
+            cuotas INTEGER,
+            rubro TEXT,
+            ambiente TEXT,
+            proveedor TEXT,
+            concepto TEXT,
+            monto_ars INTEGER,
+            tipo_cambio INTEGER,
+            monto_usd INTEGER,
+            FOREIGN KEY(proyecto_id) REFERENCES proyectos(id),
+            FOREIGN KEY(presupuesto_id) REFERENCES presupuestos_rubro(id)
+        )
+    """)
+    
+    # 7. Tabla de Especificaciones / Bitácora Técnica
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS especificaciones (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            proyecto_id INTEGER,
+            pago_id INTEGER,
+            rubro TEXT,
+            ambiente TEXT,
+            proveedor TEXT,
+            producto_concepto TEXT,
+            detalles_tecnicos TEXT,
+            FOREIGN KEY(proyecto_id) REFERENCES proyectos(id),
+            FOREIGN KEY(pago_id) REFERENCES pagos(id)
+        )
+    """)
+    
+    conn.commit()
+    
+    # Insertar proyecto inicial por defecto (Coronel Díaz)
+    cursor.execute("SELECT COUNT(*) FROM proyectos")
+    if cursor.fetchone()[0] == 0:
+        cursor.execute("""
+            INSERT INTO proyectos (id, nombre, cliente, superficie_total, precio_compra, presupuesto_reforma, precio_objetivo) 
+            VALUES (1, 'Coronel Díaz 2109 5° A', 'Verona', 137, 350000, 90000, 580000)
+        """)
+        conn.commit()
+        
+    # Rubros iniciales
+    cursor.execute("SELECT COUNT(*) FROM rubros")
+    if cursor.fetchone()[0] == 0:
+        rubros_iniciales = [
+            "Demolición y Albañilería",
+            "Instalaciones (Termomecánica/Sanitarios)",
+            "Electricidad y Domótica",
+            "Carpintería A30 y Puertas",
+            "Pisos y Revestimientos",
+            "Amoblamientos de Cocina y Placards",
+        ]
+        for r in rubros_iniciales:
+            cursor.execute("INSERT OR IGNORE INTO rubros (nombre) VALUES (?)", (r,))
+        conn.commit()
+        
+    # Proveedores iniciales
+    cursor.execute("SELECT COUNT(*) FROM proveedores")
+    if cursor.fetchone()[0] == 0:
+        prov_iniciales = [
+            ("SBG", "Pisos y Revestimientos", "Local Comercial"),
+            ("Egger", "Amoblamientos", "Fábrica"),
+            ("Aluar", "Aberturas", "Distribuidor"),
+        ]
+        for p, r, c in prov_iniciales:
+            cursor.execute("INSERT OR IGNORE INTO proveedores (nombre, rubro_principal, contacto) VALUES (?, ?, ?)", (p, r, c))
+        conn.commit()
+        
+    # Medios de pago iniciales
+    cursor.execute("SELECT COUNT(*) FROM medios_pago")
+    if cursor.fetchone()[0] == 0:
+        medios_iniciales = [
+            ("Efectivo USD", "Efectivo", "Caja fuerte"),
+            ("Transferencia Banco Galicia", "Transferencia", "Cuenta Corriente ARS"),
+            ("Visa Galicia (Principal)", "Tarjeta de Crédito", "Cierre día 20"),
+            ("Mastercard BBVA", "Tarjeta de Crédito", "Cierre día 15"),
+            ("Cheque propio", "Cheque", "Banco Galicia"),
+        ]
+        for m, t, d in medios_iniciales:
+            cursor.execute("INSERT OR IGNORE INTO medios_pago (nombre, tipo, detalle) VALUES (?, ?, ?)", (m, t, d))
+        conn.commit()
+        
+    conn.close()
 
 init_db()
 
 # --- FUNCIONES DE BASE DE DATOS ---
 def get_proyectos():
-    conn = sqlite3.connect("flipping_multiproyecto.db")
+    conn = sqlite3.connect(DB_NAME)
     df = pd.read_sql("SELECT * FROM proyectos", conn)
     conn.close()
     return df
 
+def agregar_proyecto(nombre, cliente, superficie_total, precio_compra, presupuesto_reforma, precio_objetivo):
+    conn = sqlite3.connect(DB_NAME)
+    cursor = conn.cursor()
+    try:
+        cursor.execute("""
+            INSERT INTO proyectos (nombre, cliente, superficie_total, precio_compra, presupuesto_reforma, precio_objetivo) 
+            VALUES (?, ?, ?, ?, ?, ?)
+        """, (nombre, cliente, superficie_total, precio_compra, presupuesto_reforma, precio_objetivo))
+        conn.commit()
+        exito = True
+    except sqlite3.IntegrityError:
+        exito = False
+    conn.close()
+    return exito
+
+def actualizar_proyecto(p_id, nombre, cliente, superficie_total, precio_compra, presupuesto_reforma, precio_objetivo):
+    conn = sqlite3.connect(DB_NAME)
+    cursor = conn.cursor()
+    cursor.execute("""
+        UPDATE proyectos SET nombre = ?, cliente = ?, superficie_total = ?, precio_compra = ?, presupuesto_reforma = ?, precio_objetivo = ? 
+        WHERE id = ?
+    """, (nombre, cliente, superficie_total, precio_compra, presupuesto_reforma, precio_objetivo, p_id))
+    conn.commit()
+    conn.close()
+
+def eliminar_proyecto(p_id):
+    conn = sqlite3.connect(DB_NAME)
+    cursor = conn.cursor()
+    cursor.execute("DELETE FROM proyectos WHERE id = ?", (p_id,))
+    conn.commit()
+    conn.close()
+
 def get_proveedores():
-    conn = sqlite3.connect("flipping_multiproyecto.db")
+    conn = sqlite3.connect(DB_NAME)
     df = pd.read_sql("SELECT * FROM proveedores", conn)
     conn.close()
     return df["nombre"].tolist()
 
 def get_proveedores_df():
-    conn = sqlite3.connect("flipping_multiproyecto.db")
+    conn = sqlite3.connect(DB_NAME)
     df = pd.read_sql("SELECT * FROM proveedores", conn)
     conn.close()
     return df
 
 def agregar_proveedor(nombre, rubro, contacto):
-    conn = sqlite3.connect("flipping_multiproyecto.db")
+    conn = sqlite3.connect(DB_NAME)
     cursor = conn.cursor()
     try:
         cursor.execute("INSERT INTO proveedores (nombre, rubro_principal, contacto) VALUES (?, ?, ?)", (nombre, rubro, contacto))
@@ -133,7 +317,7 @@ def agregar_proveedor(nombre, rubro, contacto):
     return exito
 
 def actualizar_proveedor(prov_id, nombre, rubro, contacto):
-    conn = sqlite3.connect("flipping_multiproyecto.db")
+    conn = sqlite3.connect(DB_NAME)
     cursor = conn.cursor()
     cursor.execute("""
         UPDATE proveedores SET nombre = ?, rubro_principal = ?, contacto = ? WHERE id = ?
@@ -142,26 +326,26 @@ def actualizar_proveedor(prov_id, nombre, rubro, contacto):
     conn.close()
 
 def eliminar_proveedor(prov_id):
-    conn = sqlite3.connect("flipping_multiproyecto.db")
+    conn = sqlite3.connect(DB_NAME)
     cursor = conn.cursor()
     cursor.execute("DELETE FROM proveedores WHERE id = ?", (prov_id,))
     conn.commit()
     conn.close()
 
 def get_rubros():
-    conn = sqlite3.connect("flipping_multiproyecto.db")
+    conn = sqlite3.connect(DB_NAME)
     df = pd.read_sql("SELECT * FROM rubros", conn)
     conn.close()
     return df["nombre"].tolist()
 
 def get_rubros_df():
-    conn = sqlite3.connect("flipping_multiproyecto.db")
+    conn = sqlite3.connect(DB_NAME)
     df = pd.read_sql("SELECT * FROM rubros", conn)
     conn.close()
     return df
 
 def agregar_rubro(nuevo_rubro):
-    conn = sqlite3.connect("flipping_multiproyecto.db")
+    conn = sqlite3.connect(DB_NAME)
     cursor = conn.cursor()
     try:
         cursor.execute("INSERT INTO rubros (nombre) VALUES (?)", (nuevo_rubro,))
@@ -173,7 +357,7 @@ def agregar_rubro(nuevo_rubro):
     return exito
 
 def actualizar_rubro(rubro_id, nuevo_nombre):
-    conn = sqlite3.connect("flipping_multiproyecto.db")
+    conn = sqlite3.connect(DB_NAME)
     cursor = conn.cursor()
     try:
         cursor.execute("UPDATE rubros SET nombre = ? WHERE id = ?", (nuevo_nombre, rubro_id))
@@ -185,26 +369,26 @@ def actualizar_rubro(rubro_id, nuevo_nombre):
     return exito
 
 def eliminar_rubro(rubro_id):
-    conn = sqlite3.connect("flipping_multiproyecto.db")
+    conn = sqlite3.connect(DB_NAME)
     cursor = conn.cursor()
     cursor.execute("DELETE FROM rubros WHERE id = ?", (rubro_id,))
     conn.commit()
     conn.close()
 
 def get_medios_pago():
-    conn = sqlite3.connect("flipping_multiproyecto.db")
+    conn = sqlite3.connect(DB_NAME)
     df = pd.read_sql("SELECT * FROM medios_pago", conn)
     conn.close()
     return df["nombre"].tolist()
 
 def get_medios_pago_df():
-    conn = sqlite3.connect("flipping_multiproyecto.db")
+    conn = sqlite3.connect(DB_NAME)
     df = pd.read_sql("SELECT * FROM medios_pago", conn)
     conn.close()
     return df
 
 def agregar_medio_pago(nombre, tipo, detalle):
-    conn = sqlite3.connect("flipping_multiproyecto.db")
+    conn = sqlite3.connect(DB_NAME)
     cursor = conn.cursor()
     try:
         cursor.execute("INSERT INTO medios_pago (nombre, tipo, detalle) VALUES (?, ?, ?)", (nombre, tipo, detalle))
@@ -216,7 +400,7 @@ def agregar_medio_pago(nombre, tipo, detalle):
     return exito
 
 def actualizar_medio_pago(mp_id, nombre, tipo, detalle):
-    conn = sqlite3.connect("flipping_multiproyecto.db")
+    conn = sqlite3.connect(DB_NAME)
     cursor = conn.cursor()
     cursor.execute("""
         UPDATE medios_pago SET nombre = ?, tipo = ?, detalle = ? WHERE id = ?
@@ -225,21 +409,21 @@ def actualizar_medio_pago(mp_id, nombre, tipo, detalle):
     conn.close()
 
 def eliminar_medio_pago(mp_id):
-    conn = sqlite3.connect("flipping_multiproyecto.db")
+    conn = sqlite3.connect(DB_NAME)
     cursor = conn.cursor()
     cursor.execute("DELETE FROM medios_pago WHERE id = ?", (mp_id,))
     conn.commit()
     conn.close()
 
 def get_pagos(proyecto_id):
-    conn = sqlite3.connect("flipping_multiproyecto.db")
+    conn = sqlite3.connect(DB_NAME)
     df = pd.read_sql("SELECT * FROM pagos WHERE proyecto_id = ?", conn, params=(proyecto_id,))
     conn.close()
     return df
 
 def agregar_pago(proyecto_id, presupuesto_id, fecha, comprobante, tipo_gasto, medio_pago, cuotas, rubro, ambiente, proveedor, concepto, monto_ars, tipo_cambio):
     monto_usd = int(monto_ars / tipo_cambio) if tipo_cambio > 0 else 0
-    conn = sqlite3.connect("flipping_multiproyecto.db")
+    conn = sqlite3.connect(DB_NAME)
     cursor = conn.cursor()
     cursor.execute("""
         INSERT INTO pagos (proyecto_id, presupuesto_id, fecha, comprobante, tipo_gasto, medio_pago, cuotas, rubro, ambiente, proveedor, concepto, monto_ars, tipo_cambio, monto_usd) 
@@ -257,7 +441,7 @@ def agregar_pago(proyecto_id, presupuesto_id, fecha, comprobante, tipo_gasto, me
     conn.close()
 
 def eliminar_pago(pago_id):
-    conn = sqlite3.connect("flipping_multiproyecto.db")
+    conn = sqlite3.connect(DB_NAME)
     cursor = conn.cursor()
     cursor.execute("DELETE FROM especificaciones WHERE pago_id = ?", (pago_id,))
     cursor.execute("DELETE FROM pagos WHERE id = ?", (pago_id,))
@@ -266,7 +450,7 @@ def eliminar_pago(pago_id):
 
 def actualizar_pago_completo(pago_id, presupuesto_id, fecha, comprobante, tipo_gasto, medio_pago, cuotas, rubro, ambiente, proveedor, concepto, monto_ars, tipo_cambio):
     monto_usd = int(monto_ars / tipo_cambio) if tipo_cambio > 0 else 0
-    conn = sqlite3.connect("flipping_multiproyecto.db")
+    conn = sqlite3.connect(DB_NAME)
     cursor = conn.cursor()
     cursor.execute("""
         UPDATE pagos SET presupuesto_id = ?, fecha = ?, comprobante = ?, tipo_gasto = ?, medio_pago = ?, cuotas = ?, rubro = ?, ambiente = ?, proveedor = ?, concepto = ?, monto_ars = ?, tipo_cambio = ?, monto_usd = ? 
@@ -287,14 +471,15 @@ def actualizar_pago_completo(pago_id, presupuesto_id, fecha, comprobante, tipo_g
     conn.commit()
     conn.close()
 
+# Funciones para Presupuesto
 def get_presupuestos(proyecto_id):
-    conn = sqlite3.connect("flipping_multiproyecto.db")
+    conn = sqlite3.connect(DB_NAME)
     df = pd.read_sql("SELECT * FROM presupuestos_rubro WHERE proyecto_id = ?", conn, params=(proyecto_id,))
     conn.close()
     return df
 
 def guardar_presupuesto_rubro(proyecto_id, rubro, ambiente, proveedor, concepto, moneda, monto_presupuestado):
-    conn = sqlite3.connect("flipping_multiproyecto.db")
+    conn = sqlite3.connect(DB_NAME)
     cursor = conn.cursor()
     cursor.execute("""
         INSERT INTO presupuestos_rubro (proyecto_id, rubro, ambiente, proveedor, concepto, moneda, monto_presupuestado) 
@@ -304,7 +489,7 @@ def guardar_presupuesto_rubro(proyecto_id, rubro, ambiente, proveedor, concepto,
     conn.close()
 
 def actualizar_presupuesto(ppto_id, rubro, ambiente, proveedor, concepto, moneda, monto_presupuestado):
-    conn = sqlite3.connect("flipping_multiproyecto.db")
+    conn = sqlite3.connect(DB_NAME)
     cursor = conn.cursor()
     cursor.execute("""
         UPDATE presupuestos_rubro SET rubro = ?, ambiente = ?, proveedor = ?, concepto = ?, moneda = ?, monto_presupuestado = ? 
@@ -314,20 +499,21 @@ def actualizar_presupuesto(ppto_id, rubro, ambiente, proveedor, concepto, moneda
     conn.close()
 
 def eliminar_presupuesto(ppto_id):
-    conn = sqlite3.connect("flipping_multiproyecto.db")
+    conn = sqlite3.connect(DB_NAME)
     cursor = conn.cursor()
     cursor.execute("DELETE FROM presupuestos_rubro WHERE id = ?", (ppto_id,))
     conn.commit()
     conn.close()
 
+# Funciones para Especificaciones / Bitácora Técnica
 def get_especificaciones(proyecto_id):
-    conn = sqlite3.connect("flipping_multiproyecto.db")
+    conn = sqlite3.connect(DB_NAME)
     df = pd.read_sql("SELECT * FROM especificaciones WHERE proyecto_id = ?", conn, params=(proyecto_id,))
     conn.close()
     return df
 
 def actualizar_detalle_especificacion(esp_id, nuevos_detalles):
-    conn = sqlite3.connect("flipping_multiproyecto.db")
+    conn = sqlite3.connect(DB_NAME)
     cursor = conn.cursor()
     cursor.execute("""
         UPDATE especificaciones SET detalles_tecnicos = ? WHERE id = ?
@@ -335,19 +521,15 @@ def actualizar_detalle_especificacion(esp_id, nuevos_detalles):
     conn.commit()
     conn.close()
 
-# --- BARRA LATERAL: SELECCIÓN DE PROYECTO Y ACCESO (DEFINIDA PRIMERO) ---
+# --- BARRA LATERAL: SELECCIÓN DE PROYECTO Y ACCESO ---
 st.sidebar.header("🏢 Selector de Proyecto (ID)")
 df_proyectos = get_proyectos()
 
-if not df_proyectos.empty:
-    proyectos_dict = {f"ID {row['id']}: {row['nombre']} (Cliente: {row['cliente']})": row["id"] for idx, row in df_proyectos.iterrows()}
-    proyecto_sel_str = st.sidebar.selectbox("Seleccionar Proyecto Activo", list(proyectos_dict.keys()))
-    proyecto_id_activo = proyectos_dict[proyecto_sel_str]
-    proyecto_info = df_proyectos[df_proyectos["id"] == proyecto_id_activo].iloc[0]
-else:
-    proyecto_id_activo = 1
-    proyecto_info = {"nombre": "Sin Proyecto", "cliente": "N/D", "superficie_total": 0, "precio_compra": 0, "presupuesto_reforma": 0, "precio_objetivo": 0}
+proyectos_dict = {f"ID {row['id']}: {row['nombre']} (Cliente: {row['cliente']})": row["id"] for idx, row in df_proyectos.iterrows()}
+proyecto_sel_str = st.sidebar.selectbox("Seleccionar Proyecto Activo", list(proyectos_dict.keys()))
+proyecto_id_activo = proyectos_dict[proyecto_sel_str]
 
+proyecto_info = df_proyectos[df_proyectos["id"] == proyecto_id_activo].iloc[0]
 sup_total = int(proyecto_info["superficie_total"])
 precio_compra_proy = int(proyecto_info["precio_compra"])
 presupuesto_ref = int(proyecto_info["presupuesto_reforma"])
@@ -441,6 +623,7 @@ if st.sidebar.button("Hacer Backup en Google Drive"):
 st.title(f"🏗️ Panel Gerencial: {proyecto_info['nombre']}")
 st.caption(f"Cliente / Inversor: {proyecto_info['cliente']} | Superficie: {sup_total} m²")
 
+# Definición de Pestañas según el Perfil (Admin vs Cliente)
 if perfil == "Project Manager (Admin)":
     tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab9, tab10 = st.tabs([
         "💳 Registro de Pagos", "📐 Especificaciones", "📊 Módulo de Reportes", 
@@ -451,6 +634,10 @@ else:
     tab_cli_1, tab_cli_2, tab_cli_3, tab_cli_4 = st.tabs([
         "📐 Especificaciones", "📊 Módulo de Reportes", "📈 Panel Financiero", "🚀 Escenarios Venta"
     ])
+
+# ==========================================
+# MÓDULOS (IDÉNTICOS A TU BASE ORIGINAL)
+# ==========================================
 
 def render_especificaciones_tab():
     st.subheader("📐 Especificaciones y Bitácora Técnica (Catálogo de Materiales)")
@@ -565,3 +752,63 @@ def render_reportes_tab():
                     })
                     
             df_final_rep = pd.DataFrame(lista_filas)
+            
+            total_p_ars = int(df_ppto_rep.apply(lambda r: r["monto_presupuestado"] if r["moneda"] == "ARS" else r["monto_presupuestado"] * tc_ref, axis=1).sum())
+            total_p_usd = int(df_ppto_rep.apply(lambda r: r["monto_presupuestado"] if r["moneda"] == "USD" else int(r["monto_presupuestado"] / tc_ref), axis=1).sum())
+            total_e_ars = int(df_pagos_rep["monto_ars"].sum()) if not df_pagos_rep.empty else 0
+            total_e_usd = int(df_pagos_rep["monto_usd"].sum()) if not df_pagos_rep.empty else 0
+            
+            st.markdown("#### 💰 Totales Generales Globales Bimonetarios")
+            col_tot1, col_tot2 = st.columns(2)
+            with col_tot1:
+                st.markdown(f"""
+                    <div class="metric-card">
+                        <div class="metric-label">Total Ejecutado vs. Presupuestado (ARS)</div>
+                        <div class="metric-value">${total_e_ars:,} /${total_p_ars:,} ARS</div>
+                    </div>
+                """.replace(",", "."), unsafe_allow_html=True)
+            with col_tot2:
+                st.markdown(f"""
+                    <div class="metric-card">
+                        <div class="metric-label">Total Ejecutado vs. Presupuestado (USD)</div>
+                        <div class="metric-value">${total_e_usd:,} /${total_p_usd:,} USD</div>
+                    </div>
+                """.replace(",", "."), unsafe_allow_html=True)
+                
+            st.markdown("---")
+            st.markdown("#### 📋 Detalle Partida por Partida (Bimonetario)")
+            df_viz = df_final_rep.copy()
+            for col in ["Ppto (ARS)", "Ppto (USD)", "Ejec (ARS)", "Ejec (USD)", "Saldo (ARS)", "Saldo (USD)"]:
+                df_viz[col] = df_viz[col].apply(lambda x: f"${int(x):,}".replace(",", "."))
+            st.dataframe(df_viz, use_container_width=True)
+            
+            st.markdown("---")
+            st.markdown("#### 📑 Totales Consolidados por Rubro y por Ambiente")
+            st.markdown('<p class="field-title">Agrupar totales por:</p>', unsafe_allow_html=True)
+            tipo_agrupacion = st.radio("Agrupar totales por:", ["Rubro de Obra", "Ambiente"], horizontal=True, label_visibility="collapsed")
+            col_agruppar = "Rubro" if tipo_agrupacion == "Rubro de Obra" else "Ambiente"
+            
+            df_agrupado = df_final_rep.groupby(col_agruppar)[["Ppto (ARS)", "Ppto (USD)", "Ejec (ARS)", "Ejec (USD)", "Saldo (ARS)", "Saldo (USD)"]].sum().reset_index()
+            df_agr_viz = df_agrupado.copy()
+            for col in ["Ppto (ARS)", "Ppto (USD)", "Ejec (ARS)", "Ejec (USD)", "Saldo (ARS)", "Saldo (USD)"]:
+                df_agr_viz[col] = df_agr_viz[col].apply(lambda x: f"${int(x):,}".replace(",", "."))
+            st.dataframe(df_agr_viz, use_container_width=True)
+        else:
+            st.info("No hay presupuestos cargados para este proyecto.")
+
+    with rep_tab2:
+        st.markdown("### 💳 Exposición Consolidada por Medio de Pago / Tarjeta")
+        df_pagos_rep = get_pagos(proyecto_id_activo)
+        if not df_pagos_rep.empty:
+            df_mp_resumen = df_pagos_rep.groupby("medio_pago").agg(
+                total_ars=("monto_ars", "sum"),
+                total_usd=("monto_usd", "sum"),
+                cantidad_pagos=("id", "count"),
+                cuotas_promedio=("cuotas", "mean")
+            ).reset_index()
+            
+            df_mp_viz = df_mp_resumen.copy()
+            df_mp_viz["total_ars"] = df_mp_viz["total_ars"].apply(lambda x: f"${int(x):,}".replace(",", "."))
+            df_mp_viz["total_usd"] = df_mp_viz["total_usd"].apply(lambda x: f"${int(x):,}".replace(",", "."))
+            df_mp_viz["cuotas_promedio"] = df_mp_viz["cuotas_promedio"].apply(lambda x: f"{round(x, 1)}")
+            df
