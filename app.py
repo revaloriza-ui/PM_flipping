@@ -375,38 +375,67 @@ import base64
 def hacer_backup_drive():
     try:
         gdrive_secrets = st.secrets["google_drive"]
-        client_email = gdrive_secrets["client_email"]
-        folder_id = gdrive_secrets["folder_id"]
         
-        # Generamos un reporte de texto limpio con los datos actuales del proyecto
-        df_p = get_pagos(proyecto_id_activo)
-        contenido_backup = f"=== RESUMEN DE BACKUP PM FLIPPING ===\n"
-        contenido_backup += f"Fecha: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n"
-        contenido_backup += f"Proyecto Activo ID: {proyecto_id_activo}\n\n"
-        if not df_p.empty:
-            contenido_backup += df_p.to_string()
-        else:
-            contenido_backup += "Sin pagos registrados aún."
-
-        # Subimos el respaldo usando una petición directa segura
-        headers = {"Content-Type": "application/json"}
-        
-        # Como alternativa limpia y sin lidiar con llaves PEM rotas en la nube, 
-        # generamos el archivo de texto directamente en la carpeta compartida
-        file_metadata = {
-            'name': f'backup_pm_flipping_{datetime.now().strftime("%Y%m%d_%H%M%S")}.txt',
-            'parents': [folder_id]
+        # Limpieza rigurosa de saltos de línea en la clave privada
+        raw_key = gdrive_secrets["private_key"]
+        formatted_key = raw_key.strip()
+        if not formatted_key.startswith("-----BEGIN PRIVATE KEY-----"):
+            formatted_key = "-----BEGIN PRIVATE KEY-----\n" + formatted_key
+        if not formatted_key.endswith("-----END PRIVATE KEY-----"):
+            formatted_key = formatted_key + "\n-----END PRIVATE KEY-----"
+            
+        credentials_info = {
+            "type": "service_account",
+            "project_id": "pm-flipping-backup",
+            "private_key_id": "632234b40217f46df7adcdd014ef65b636ab09ad",
+            "private_key": formatted_key,
+            "client_email": gdrive_secrets["client_email"],
+            "client_id": "103287396645637093815",
+            "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+            "token_uri": "https://oauth2.googleapis.com/token",
+            "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
+            "client_x509_cert_url": f"https://www.googleapis.com/robot/v1/metadata/x509/{gdrive_secrets['client_email'].replace('@', '%40')}",
+            "universe_domain": "googleapis.com"
         }
         
-        # Si prefieres evitar el uso de la clave privada de servicio por las restricciones 
-        # de formato en Streamlit Cloud, puedes registrar el respaldo como un evento exitoso
-        # o utilizar el almacenamiento nativo de Supabase que ya es 100% seguro y automático.
+        creds = service_account.Credentials.from_service_account_info(
+            credentials_info, scopes=['https://www.googleapis.com/auth/drive.file']
+        )
         
-        st.sidebar.success("¡Respaldo simulado y verificado en la nube con éxito!")
+        service = build('drive', 'v3', credentials=creds)
+        
+        # Extraemos los datos reales en formato CSV
+        df_pagos_bk = get_pagos(proyecto_id_activo)
+        df_proyectos_bk = get_proyectos()
+        
+        contenido_csv = "=== PROYECTOS ===\n"
+        contenido_csv += df_proyectos_bk.to_csv(index=False)
+        contenido_csv += "\n=== PAGOS DEL PROYECTO ===\n"
+        contenido_csv += df_pagos_bk.to_csv(index=False)
+        
+        file_metadata = {
+            'name': f'backup_pm_flipping_{datetime.now().strftime("%Y%m%d_%H%M%S")}.csv',
+            'parents': [gdrive_secrets["folder_id"]]
+        }
+        
+        media = MediaIoBaseUpload(
+            io.BytesIO(contenido_csv.encode('utf-8')),
+            mimetype='text/csv',
+            resumable=True
+        )
+        
+        file = service.files().create(
+            body=file_metadata,
+            media_body=media,
+            fields='id'
+        ).execute()
+        
+        st.sidebar.success(f"¡Archivo subido con éxito! ID: {file.get('id')}")
         return True
     except Exception as e:
-        st.error(f"Error al realizar el backup: {e}")
+        st.error(f"Error real al conectar con Google Drive: {e}")
         return False
+        
 # --- BARRA LATERAL: SELECCIÓN DE PROYECTO Y ACCESO ---
 st.sidebar.header("🏢 Selector de Proyecto (ID)")
 df_proyectos = get_proyectos()
