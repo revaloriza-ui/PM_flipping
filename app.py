@@ -556,23 +556,23 @@ st.sidebar.metric("CapEx Ejecutado Real", f"${total_ejecutado:,} USD".replace(",
 st.sidebar.metric("Profit Estimado", f"${profit_est:,} USD".replace(",", "."))
 st.sidebar.metric("ROI Neto Proyectado", f"{roi_est}%")
 
-# --- FUNCIÓN DE RESPALDO AUTOMÁTICO EN GOOGLE DRIVE ---
+# --- FUNCIÓN DE RESPALDO AUTOMÁTICO EN GOOGLE DRIVE (Blindada contra errores PEM) ---
 def hacer_backup_drive():
     try:
         gdrive_secrets = st.secrets["google_drive"]
         
-        # Limpieza robusta de la clave privada para evitar errores PEM
         raw_key = gdrive_secrets["private_key"]
-        if "-----BEGIN PRIVATE KEY-----" in raw_key:
-            formatted_key = raw_key.replace("\\n", "\n")
-        else:
-            formatted_key = raw_key
-            
+        # Limpieza automática de comillas extra, espacios o saltos de línea mal interpretados
+        cleaned_key = raw_key.strip().strip('"').strip("'").replace("\\n", "\n")
+        
+        if "-----BEGIN PRIVATE KEY-----" not in cleaned_key:
+            raise ValueError("La clave privada de Google Drive no contiene la cabecera BEGIN PRIVATE KEY válida.")
+
         credentials_info = {
             "type": "service_account",
             "project_id": "pm-flipping-backup",
             "private_key_id": "632234b40217f46df7adcdd014ef65b636ab09ad",
-            "private_key": formatted_key,
+            "private_key": cleaned_key,
             "client_email": gdrive_secrets["client_email"],
             "client_id": "103287396645637093815",
             "auth_uri": "https://accounts.google.com/o/oauth2/auth",
