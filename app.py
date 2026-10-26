@@ -376,9 +376,8 @@ def hacer_backup_drive():
     try:
         gdrive_secrets = st.secrets["google_drive"]
         
-        # Limpieza estricta y formato correcto de los saltos de línea de la clave privada
-        raw_key = gdrive_secrets["private_key"].strip()
-        formatted_key = raw_key.replace("\\n", "\n")
+        # Procesamos la clave privada reemplazando los saltos de línea de texto plano
+        formatted_key = gdrive_secrets["private_key"].replace("\\n", "\n")
         
         credentials_info = {
             "type": "service_account",
@@ -394,14 +393,13 @@ def hacer_backup_drive():
             "universe_domain": "googleapis.com"
         }
         
-        # Usamos el cliente oficial de Google con la clave ya formateada correctamente
         creds = service_account.Credentials.from_service_account_info(
             credentials_info, scopes=['https://www.googleapis.com/auth/drive.file']
         )
         
         service = build('drive', 'v3', credentials=creds)
         
-        # Generamos el archivo CSV real con tus datos
+        # Generamos el archivo CSV real con los datos de Supabase/SQLite
         df_pagos_bk = get_pagos(proyecto_id_activo)
         df_proyectos_bk = get_proyectos()
         
@@ -431,40 +429,7 @@ def hacer_backup_drive():
         return True
     except Exception as e:
         st.error(f"Error al conectar con Google Drive: {e}")
-        return False# --- BARRA LATERAL: SELECCIÓN DE PROYECTO Y ACCESO ---
-st.sidebar.header("🏢 Selector de Proyecto (ID)")
-df_proyectos = get_proyectos()
-
-proyectos_dict = {f"ID {row['id']}: {row['nombre']} (Cliente: {row['cliente']})": row["id"] for idx, row in df_proyectos.iterrows()}
-proyecto_sel_str = st.sidebar.selectbox("Seleccionar Proyecto Activo", list(proyectos_dict.keys()))
-proyecto_id_activo = proyectos_dict[proyecto_sel_str]
-
-proyecto_info = df_proyectos[df_proyectos["id"] == proyecto_id_activo].iloc[0]
-sup_total = int(proyecto_info["superficie_total"])
-precio_compra_proy = int(proyecto_info["precio_compra"])
-presupuesto_ref = int(proyecto_info["presupuesto_reforma"])
-precio_salida = int(proyecto_info["precio_objetivo"])
-
-st.sidebar.markdown("---")
-st.sidebar.header("🔐 Control de Perfil")
-perfil = st.sidebar.selectbox("Perfil de Usuario", ["Project Manager (Admin)", "Inversora / Cliente"])
-
-st.sidebar.markdown("---")
-st.sidebar.header("📊 Resumen del Proyecto")
-
-df_pagos = get_pagos(proyecto_id_activo)
-total_ejecutado = int(df_pagos["monto_usd"].sum()) if not df_pagos.empty else 0
-
-gastos_compra_sidebar = int(precio_compra_proy * 0.08)
-gastos_comercial = int(precio_salida * 0.06)
-costo_total_est = (precio_compra_proy + gastos_compra_sidebar + presupuesto_ref)
-profit_est = int(precio_salida - costo_total_est - gastos_comercial)
-roi_est = int((profit_est / costo_total_est) * 100) if costo_total_est > 0 else 0
-
-st.sidebar.metric("Superficie Total", f"{sup_total:,} m²".replace(",", "."))
-st.sidebar.metric("CapEx Ejecutado Real", f"${total_ejecutado:,} USD".replace(",", "."))
-st.sidebar.metric("Profit Estimado", f"${profit_est:,} USD".replace(",", "."))
-st.sidebar.metric("ROI Neto Proyectado", f"{roi_est}%")
+        return False
 
 # Botón de Respaldo en Google Drive en la Barra Lateral
 st.sidebar.markdown("---")
