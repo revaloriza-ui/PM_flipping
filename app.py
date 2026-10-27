@@ -42,7 +42,7 @@ h3 {
     margin-bottom: 0.4rem !important;  
 }  
 
-/* UNIFICACIÓN VISUAL: Títulos/Etiquetas de campos en formularios y filtros (Mayúsculas, sin negrita, azul suave) */  
+/* UNIFICACIÓN VISUAL: Títulos/Etiquetas de campos en formularios y filtros */  
 .field-title {  
     color: #3182ce !important;  
     font-weight: 400 !important;  
@@ -75,7 +75,7 @@ h3 {
     font-weight: 600;  
 }  
 
-/* UNIFICACIÓN GLOBAL DE TABLAS: Cabeceras en azul suave, mayúsculas, sin negrita, sin saltos de línea */  
+/* UNIFICACIÓN GLOBAL DE TABLAS (Desktop) */  
 table th {  
     font-size: 13px !important;  
     text-transform: uppercase !important;  
@@ -92,6 +92,32 @@ table td {
     padding-bottom: 8px !important;  
     color: #2d3748 !important;  
 }  
+
+/* ========================================== */
+/* ADAPTACIÓN RESPONSIVE PARA CELULARES       */
+/* ========================================== */
+@media (max-width: 768px) {
+    /* Permitir que las tablas en celular ajusten el texto y no obliguen tanto scroll horizontal */
+    table th, table td {
+        white-space: normal !important;  
+        font-size: 11px !important;
+        padding: 6px 4px !important;
+    }
+    
+    /* Reducir ligeramente tamaños de títulos en pantallas chicas */
+    h1 { font-size: 22px !important; }
+    h2 { font-size: 17px !important; }
+    h3 { font-size: 14px !important; }
+    
+    /* Ajustar tarjetas de métricas para que ocupen menos espacio vertical */
+    .metric-card {
+        padding: 10px 14px;
+        margin-bottom: 8px;
+    }
+    .metric-value {  
+        font-size: 15px !important;  
+    }
+}
 </style>  
 """, unsafe_allow_html=True)
 
