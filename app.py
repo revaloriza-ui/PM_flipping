@@ -740,9 +740,10 @@ def render_escenarios_venta():
     with col_p2:
         remodelacion_input = st.number_input("Remodelación Escenario (USD)", min_value=0, value=int(presupuesto_ref), step=5000, format="%d")
     with col_p3:
-        val_mercado_total = st.number_input("Valor de Mercado Total (USD)", min_value=50000, value=520000, step=10000, format="%d")
+        val_m2_mercado = st.number_input("Valor de Mercado (USD/m²)", min_value=500, value=3800, step=100, format="%d")
         
-    val_m2_mercado = int(val_mercado_total / sup_m2) if sup_m2 > 0 else 0
+    val_mercado_total = int(val_m2_mercado * sup_m2)
+    st.caption(f"💡 Valor de Mercado Total estimado para los {sup_m2} m²: **${val_mercado_total:,} USD**".replace(",", "."))
     
     pes_vta = int(val_mercado_total * 0.95)
     con_vta = val_mercado_total
@@ -763,7 +764,7 @@ def render_escenarios_venta():
     
     res1, res2, res3 = st.columns(3)
     
-    def mostrar_tabla_escenario(titulo, gventa, profit, roi, dif, tipo_alerta, texto_alerta, v_venta):
+    def mostrar_tabla_escenario(titulo, gventa, profit, roi, dif, v_venta):
         st.markdown(f"#### {titulo}")
         df_tabla_esc = pd.DataFrame({
             "Indicador Financiero": ["Valor de Venta", "Costo Total Inversión", "Ganancia Total (USD)", "ROI Neto", "Dif. Mercado"],
@@ -773,19 +774,21 @@ def render_escenarios_venta():
             ]
         })
         st.dataframe(df_tabla_esc, use_container_width=True, hide_index=True)
-        if tipo_alerta == "error":
-            st.error(texto_alerta)
-        elif tipo_alerta == "warning":
-            st.warning(texto_alerta)
+        
+        # Corrección de la lógica de alertas para que nunca dé verde si da pérdida o ROI bajo
+        if roi < 0:
+            st.error("🚨 ¡Pérdida financiera! Inversión no viable en este escenario.")
+        elif roi < 10:
+            st.warning("⚠️ Margen ajustado o moderado. Analizar riesgos.")
         else:
-            st.success(texto_alerta)
+            st.success("✅ Excelente rentabilidad proyectada.")
             
     with res1:
-        mostrar_tabla_escenario("📉 Pesimista", pes_gventa, pes_profit, pes_roi, pes_dif, "warning" if pes_roi < 10 else "success", "Margen moderado.", pes_vta)
+        mostrar_tabla_escenario("📉 Pesimista", pes_gventa, pes_profit, pes_roi, pes_dif, pes_vta)
     with res2:
-        mostrar_tabla_escenario("📊 Conservador", con_gventa, con_profit, con_roi, con_dif, "success", "Escenario saludable y seguro.", con_vta)
+        mostrar_tabla_escenario("📊 Conservador", con_gventa, con_profit, con_roi, con_dif, con_vta)
     with res3:
-        mostrar_tabla_escenario("🚀 Optimista", opt_gventa, opt_profit, opt_roi, opt_dif, "success", "Excelente rentabilidad.", opt_vta)
+        mostrar_tabla_escenario("🚀 Optimista", opt_gventa, opt_profit, opt_roi, opt_dif, opt_vta)
 
 # --- ENRUTAMIENTO SEGÚN PERFIL ---
 if perfil == "Project Manager (Admin)":
