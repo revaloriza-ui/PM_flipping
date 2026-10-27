@@ -740,10 +740,16 @@ def render_escenarios_venta():
     with col_p2:
         remodelacion_input = st.number_input("Remodelación Escenario (USD)", min_value=0, value=int(presupuesto_ref), step=5000, format="%d")
     with col_p3:
-        val_m2_mercado = st.number_input("Valor de Mercado (USD/m²)", min_value=500, value=3800, step=100, format="%d")
+        # Selector para elegir si se ingresa Valor Total o Valor por m²
+        modo_ingreso_val = st.radio("Método de Cotización", ["Valor Total (USD)", "Valor por m² (USD/m²)"], horizontal=True)
         
-    val_mercado_total = int(val_m2_mercado * sup_m2)
-    st.caption(f"💡 Valor de Mercado Total estimado para los {sup_m2} m²: **${val_mercado_total:,} USD**".replace(",", "."))
+    if modo_ingreso_val == "Valor Total (USD)":
+        val_mercado_total = st.number_input("Valor de Mercado Total (USD)", min_value=50000, value=520000, step=10000, format="%d")
+        st.caption(f"💡 Ingresado como Valor Global Total: **${val_mercado_total:,} USD**".replace(",", "."))
+    else:
+        val_m2_mercado = st.number_input("Valor de Mercado (USD/m²)", min_value=500, value=3800, step=100, format="%d")
+        val_mercado_total = int(val_m2_mercado * sup_m2)
+        st.caption(f"💡 Calculado (${val_m2_mercado:,} USD/m² × {sup_m2} m²): **${val_mercado_total:,} USD**".replace(",", "."))
     
     pes_vta = int(val_mercado_total * 0.95)
     con_vta = val_mercado_total
@@ -775,7 +781,6 @@ def render_escenarios_venta():
         })
         st.dataframe(df_tabla_esc, use_container_width=True, hide_index=True)
         
-        # Corrección de la lógica de alertas para que nunca dé verde si da pérdida o ROI bajo
         if roi < 0:
             st.error("🚨 ¡Pérdida financiera! Inversión no viable en este escenario.")
         elif roi < 10:
