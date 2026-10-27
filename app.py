@@ -4,9 +4,6 @@ import sqlite3
 import pandas as pd
 import plotly.express as px
 import streamlit as st
-from google.oauth2 import service_account
-from googleapiclient.discovery import build
-from googleapiclient.http import MediaIoBaseUpload
 
 # --- CONFIGURACIÓN DE PÁGINA Y ESTILOS CSS UNIFICADOS (ESTILO REVALORIZA) ---
 st.set_page_config(
@@ -270,13 +267,9 @@ if not st.session_state.authenticated:
         submit_login = st.form_submit_button("Ingresar")
         
         if submit_login:
-            # Obtenemos claves de los secretos o usamos valores por defecto si no están configurados
-            try:
-                admin_pass = st.secrets["auth"]["admin_password"]
-                client_pass = st.secrets["auth"]["client_password"]
-            except:
-                admin_pass = "admin2026"
-                client_pass = "cliente2026"
+            # Claves fijas directas para evitar fallos
+            admin_pass = "admin2026"
+            client_pass = "cliente2026"
                 
             if password_input == admin_pass:
                 st.session_state.authenticated = True
@@ -301,38 +294,6 @@ def get_proyectos():
     conn.close()
     return df
 
-def agregar_proyecto(nombre, cliente, superficie_total, precio_compra, presupuesto_reforma, precio_objetivo):
-    conn = sqlite3.connect(DB_NAME)
-    cursor = conn.cursor()
-    try:
-        cursor.execute("""
-            INSERT INTO proyectos (nombre, cliente, superficie_total, precio_compra, presupuesto_reforma, precio_objetivo) 
-            VALUES (?, ?, ?, ?, ?, ?)
-        """, (nombre, cliente, superficie_total, precio_compra, presupuesto_reforma, precio_objetivo))
-        conn.commit()
-        exito = True
-    except sqlite3.IntegrityError:
-        exito = False
-    conn.close()
-    return exito
-
-def actualizar_proyecto(p_id, nombre, cliente, superficie_total, precio_compra, presupuesto_reforma, precio_objetivo):
-    conn = sqlite3.connect(DB_NAME)
-    cursor = conn.cursor()
-    cursor.execute("""
-        UPDATE proyectos SET nombre = ?, cliente = ?, superficie_total = ?, precio_compra = ?, presupuesto_reforma = ?, precio_objetivo = ? 
-        WHERE id = ?
-    """, (nombre, cliente, superficie_total, precio_compra, presupuesto_reforma, precio_objetivo, p_id))
-    conn.commit()
-    conn.close()
-
-def eliminar_proyecto(p_id):
-    conn = sqlite3.connect(DB_NAME)
-    cursor = conn.cursor()
-    cursor.execute("DELETE FROM proyectos WHERE id = ?", (p_id,))
-    conn.commit()
-    conn.close()
-
 def get_proveedores():
     conn = sqlite3.connect(DB_NAME)
     df = pd.read_sql("SELECT * FROM proveedores", conn)
@@ -344,34 +305,6 @@ def get_proveedores_df():
     df = pd.read_sql("SELECT * FROM proveedores", conn)
     conn.close()
     return df
-
-def agregar_proveedor(nombre, rubro, contacto):
-    conn = sqlite3.connect(DB_NAME)
-    cursor = conn.cursor()
-    try:
-        cursor.execute("INSERT INTO proveedores (nombre, rubro_principal, contacto) VALUES (?, ?, ?)", (nombre, rubro, contacto))
-        conn.commit()
-        exito = True
-    except sqlite3.IntegrityError:
-        exito = False
-    conn.close()
-    return exito
-
-def actualizar_proveedor(prov_id, nombre, rubro, contacto):
-    conn = sqlite3.connect(DB_NAME)
-    cursor = conn.cursor()
-    cursor.execute("""
-        UPDATE proveedores SET nombre = ?, rubro_principal = ?, contacto = ? WHERE id = ?
-    """, (nombre, rubro, contacto, prov_id))
-    conn.commit()
-    conn.close()
-
-def eliminar_proveedor(prov_id):
-    conn = sqlite3.connect(DB_NAME)
-    cursor = conn.cursor()
-    cursor.execute("DELETE FROM proveedores WHERE id = ?", (prov_id,))
-    conn.commit()
-    conn.close()
 
 def get_rubros():
     conn = sqlite3.connect(DB_NAME)
@@ -385,37 +318,6 @@ def get_rubros_df():
     conn.close()
     return df
 
-def agregar_rubro(nuevo_rubro):
-    conn = sqlite3.connect(DB_NAME)
-    cursor = conn.cursor()
-    try:
-        cursor.execute("INSERT INTO rubros (nombre) VALUES (?)", (nuevo_rubro,))
-        conn.commit()
-        exito = True
-    except sqlite3.IntegrityError:
-        exito = False
-    conn.close()
-    return exito
-
-def actualizar_rubro(rubro_id, nuevo_nombre):
-    conn = sqlite3.connect(DB_NAME)
-    cursor = conn.cursor()
-    try:
-        cursor.execute("UPDATE rubros SET nombre = ? WHERE id = ?", (nuevo_nombre, rubro_id))
-        conn.commit()
-        exito = True
-    except sqlite3.IntegrityError:
-        exito = False
-    conn.close()
-    return exito
-
-def eliminar_rubro(rubro_id):
-    conn = sqlite3.connect(DB_NAME)
-    cursor = conn.cursor()
-    cursor.execute("DELETE FROM rubros WHERE id = ?", (rubro_id,))
-    conn.commit()
-    conn.close()
-
 def get_medios_pago():
     conn = sqlite3.connect(DB_NAME)
     df = pd.read_sql("SELECT * FROM medios_pago", conn)
@@ -427,34 +329,6 @@ def get_medios_pago_df():
     df = pd.read_sql("SELECT * FROM medios_pago", conn)
     conn.close()
     return df
-
-def agregar_medio_pago(nombre, tipo, detalle):
-    conn = sqlite3.connect(DB_NAME)
-    cursor = conn.cursor()
-    try:
-        cursor.execute("INSERT INTO medios_pago (nombre, tipo, detalle) VALUES (?, ?, ?)", (nombre, tipo, detalle))
-        conn.commit()
-        exito = True
-    except sqlite3.IntegrityError:
-        exito = False
-    conn.close()
-    return exito
-
-def actualizar_medio_pago(mp_id, nombre, tipo, detalle):
-    conn = sqlite3.connect(DB_NAME)
-    cursor = conn.cursor()
-    cursor.execute("""
-        UPDATE medios_pago SET nombre = ?, tipo = ?, detalle = ? WHERE id = ?
-    """, (nombre, tipo, detalle, mp_id))
-    conn.commit()
-    conn.close()
-
-def eliminar_medio_pago(mp_id):
-    conn = sqlite3.connect(DB_NAME)
-    cursor = conn.cursor()
-    cursor.execute("DELETE FROM medios_pago WHERE id = ?", (mp_id,))
-    conn.commit()
-    conn.close()
 
 def get_pagos(proyecto_id):
     conn = sqlite3.connect(DB_NAME)
@@ -604,13 +478,13 @@ st.caption(f"Cliente / Inversor: {proyecto_info['cliente']} | Superficie: {sup_t
 
 # Definición de Pestañas según el Perfil
 if perfil == "Project Manager (Admin)":
-    tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab9, tab10 = st.tabs([
+    tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab9, tab10, tab11 = st.tabs([
         "💳 Registro de Pagos", "📐 Especificaciones", "📊 Módulo de Reportes", 
         "🏢 ABM Proyectos", "📑 ABM Proveedores", "🛠️ ABM Rubros", 
-        "💳 ABM Medios de Pago", "📋 ABM Presupuestos", "📈 Panel Financiero", "🚀 Escenarios Venta"
+        "💳 ABM Medios de Pago", "📋 ABM Presupuestos", "📈 Panel Financiero", "🚀 Escenarios Venta",
+        "📥 Importar / Exportar"
     ])
 else:
-    # VISTA CLIENTE LIMPIA Y OPTIMIZADA
     tab_cli_1, tab_cli_2, tab_cli_3, tab_cli_4 = st.tabs([
         "📐 Bitácora Técnica", "📊 Reportes Ejecutivos", "📈 Panel Financiero", "🚀 Escenarios de Salida"
     ])
@@ -631,7 +505,6 @@ def render_especificaciones_tab():
         if filtro_amb_esp != "Todos":
             df_esp_viz = df_esp_viz[df_esp_viz["ambiente"] == filtro_amb_esp]
             
-        # LIMPIEZA DE IDs: Mostramos solo el ID del ítem y ocultamos foreign keys internas
         df_esp_display = df_esp_viz[["id", "rubro", "ambiente", "proveedor", "producto_concepto", "detalles_tecnicos"]].copy()
         df_esp_display.columns = ["N° Ítem", "Rubro", "Ambiente", "Proveedor", "Concepto", "Detalles Técnicos"]
         st.dataframe(df_esp_display, use_container_width=True)
@@ -1021,12 +894,15 @@ if perfil == "Project Manager (Admin)":
             np_salida = st.number_input("Precio Venta Objetivo (USD)", min_value=10000, value=350000, step=10000, format="%d", label_visibility="collapsed")
             
             if st.form_submit_button("➕ Crear Proyecto") and np_nombre:
-                agregar_proyecto(np_nombre, np_cliente, np_sup, np_compra, np_ref, np_salida)
+                conn_tmp = sqlite3.connect(DB_NAME)
+                cursor_tmp = conn_tmp.cursor()
+                cursor_tmp.execute("INSERT INTO proyectos (nombre, cliente, superficie_total, precio_compra, presupuesto_reforma, precio_objetivo) VALUES (?, ?, ?, ?, ?, ?)", 
+                                   (np_nombre, np_cliente, np_sup, np_compra, np_ref, np_salida))
+                conn_tmp.commit()
+                conn_tmp.close()
                 st.success("¡Proyecto creado!")
                 st.rerun()
-        
-        df_proy_viz = get_proyectos()
-        st.dataframe(df_proy_viz, use_container_width=True)
+        st.dataframe(get_proyectos(), use_container_width=True)
 
     with tab5:
         st.subheader("📑 ABM de Proveedores")
@@ -1035,7 +911,11 @@ if perfil == "Project Manager (Admin)":
             p_rubro = st.selectbox("Rubro Principal", get_rubros(), label_visibility="collapsed")
             p_contacto = st.text_input("Contacto", label_visibility="collapsed")
             if st.form_submit_button("➕ Guardar") and p_nombre:
-                agregar_proveedor(p_nombre, p_rubro, p_contacto)
+                conn_tmp = sqlite3.connect(DB_NAME)
+                cursor_tmp = conn_tmp.cursor()
+                cursor_tmp.execute("INSERT INTO proveedores (nombre, rubro_principal, contacto) VALUES (?, ?, ?)", (p_nombre, p_rubro, p_contacto))
+                conn_tmp.commit()
+                conn_tmp.close()
                 st.success("¡Guardado!")
                 st.rerun()
         st.dataframe(get_proveedores_df(), use_container_width=True)
@@ -1045,7 +925,11 @@ if perfil == "Project Manager (Admin)":
         with st.form("form_nuevo_rubro", clear_on_submit=True):
             nuevo_cat = st.text_input("Nombre del Rubro", label_visibility="collapsed")
             if st.form_submit_button("➕ Agregar") and nuevo_cat:
-                agregar_rubro(nuevo_cat)
+                conn_tmp = sqlite3.connect(DB_NAME)
+                cursor_tmp = conn_tmp.cursor()
+                cursor_tmp.execute("INSERT INTO rubros (nombre) VALUES (?)", (nuevo_cat,))
+                conn_tmp.commit()
+                conn_tmp.close()
                 st.success("¡Agregado!")
                 st.rerun()
         st.dataframe(get_rubros_df(), use_container_width=True)
@@ -1057,7 +941,11 @@ if perfil == "Project Manager (Admin)":
             mp_tipo = st.selectbox("Tipo", ["Tarjeta de Crédito", "Transferencia", "Efectivo", "Cheque", "Otro"], label_visibility="collapsed")
             mp_detalle = st.text_input("Detalle", label_visibility="collapsed")
             if st.form_submit_button("➕ Guardar") and mp_nombre:
-                agregar_medio_pago(mp_nombre, mp_tipo, mp_detalle)
+                conn_tmp = sqlite3.connect(DB_NAME)
+                cursor_tmp = conn_tmp.cursor()
+                cursor_tmp.execute("INSERT INTO medios_pago (nombre, tipo, detalle) VALUES (?, ?, ?)", (mp_nombre, mp_tipo, mp_detalle))
+                conn_tmp.commit()
+                conn_tmp.close()
                 st.success("¡Guardado!")
                 st.rerun()
         st.dataframe(get_medios_pago_df(), use_container_width=True)
@@ -1081,6 +969,96 @@ if perfil == "Project Manager (Admin)":
         render_panel_financiero()
     with tab10:
         render_escenarios_venta()
+    with tab11:
+        st.subheader("📥 Importar y Exportar Planillas (Presupuestos y Pagos)")
+        st.markdown("Descargá las plantillas vacías, completalas en Excel y subilas para cargar masivamente los datos en el proyecto activo.")
+        
+        imp_sub1, imp_sub2 = st.tabs(["📥 Descargar Plantillas", "📤 Subir / Importar Planillas"])
+        
+        with imp_sub1:
+            st.markdown("### 📥 Plantillas de Ejemplo para Descargar")
+            
+            df_plantilla_ppto = pd.DataFrame([{
+                "rubro": "Demolición y Albañilería",
+                "ambiente": "Cocina",
+                "proveedor": "SBG",
+                "concepto": "Picado de revoques y mampostería",
+                "moneda": "USD",
+                "monto_presupuestado": 3500
+            }])
+            csv_ppto = df_plantilla_ppto.to_csv(index=False).encode('utf-8')
+            st.download_button("📥 Descargar Plantilla CSV de Presupuestos", data=csv_ppto, file_name="plantilla_presupuestos.csv", mime="text/csv")
+            
+            st.markdown("---")
+            
+            df_plantilla_pagos = pd.DataFrame([{
+                "presupuesto_id": 1,
+                "fecha": "2026-06-01",
+                "comprobante": "FC 0001-00012345",
+                "tipo_gasto": "Material / Producto",
+                "medio_pago": "Visa Galicia (Principal)",
+                "cuotas": 3,
+                "rubro": "Demolición y Albañilería",
+                "ambiente": "Cocina",
+                "proveedor": "SBG",
+                "concepto": "Acopio de materiales",
+                "monto_ars": 1250000,
+                "tipo_cambio": 1250
+            }])
+            csv_pagos = df_plantilla_pagos.to_csv(index=False).encode('utf-8')
+            st.download_button("📥 Descargar Plantilla CSV de Pagos", data=csv_pagos, file_name="plantilla_pagos.csv", mime="text/csv")
+            
+        with imp_sub2:
+            st.markdown("### 📤 Carga Masiva desde CSV")
+            
+            tipo_carga = st.selectbox("Seleccioná qué querés importar", ["Presupuestos", "Pagos"])
+            archivo_subido = st.file_uploader(f"Subir archivo CSV de {tipo_carga}", type=["csv"])
+            
+            if archivo_subido is not None:
+                try:
+                    df_upload = pd.read_csv(archivo_subido)
+                    st.markdown("#### Vista previa de los datos a importar:")
+                    st.dataframe(df_upload, use_container_width=True)
+                    
+                    if st.button(f"🚀 Importar {tipo_carga} al Proyecto Activo"):
+                        conn_imp = sqlite3.connect(DB_NAME)
+                        cursor_imp = conn_imp.cursor()
+                        
+                        if tipo_carga == "Presupuestos":
+                            for idx, row in df_upload.iterrows():
+                                cursor_imp.execute("""
+                                    INSERT INTO presupuestos_rubro (proyecto_id, rubro, ambiente, proveedor, concepto, moneda, monto_presupuestado)
+                                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                                """, (proyecto_id_activo, row["rubro"], row["ambiente"], row["proveedor"], row["concepto"], row["moneda"], int(row["monto_presupuestado"])))
+                            conn_imp.commit()
+                            st.success(f"¡Se importaron {len(df_upload)} presupuestos con éxito!")
+                            
+                        elif tipo_carga == "Pagos":
+                            for idx, row in df_upload.iterrows():
+                                p_id = int(row["presupuesto_id"]) if pd.notnull(row["presupuesto_id"]) and row["presupuesto_id"] != "" else None
+                                m_ars = int(row["monto_ars"])
+                                tc = int(row["tipo_cambio"]) if int(row["tipo_cambio"]) > 0 else 1250
+                                m_usd = int(m_ars / tc)
+                                
+                                cursor_imp.execute("""
+                                    INSERT INTO pagos (proyecto_id, presupuesto_id, fecha, comprobante, tipo_gasto, medio_pago, cuotas, rubro, ambiente, proveedor, concepto, monto_ars, tipo_cambio, monto_usd)
+                                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                                """, (proyecto_id_activo, p_id, str(row["fecha"]), str(row["comprobante"]), str(row["tipo_gasto"]), str(row["medio_pago"]), int(row["cuotas"]), str(row["rubro"]), str(row["ambiente"]), str(row["proveedor"]), str(row["concepto"]), m_ars, tc, m_usd))
+                                
+                                new_pago_id = cursor_imp.lastrowid
+                                if str(row["tipo_gasto"]) == "Material / Producto":
+                                    cursor_imp.execute("""
+                                        INSERT INTO especificaciones (proyecto_id, pago_id, rubro, ambiente, proveedor, producto_concepto, detalles_tecnicos)
+                                        VALUES (?, ?, ?, ?, ?, ?, ?)
+                                    """, (proyecto_id_activo, new_pago_id, str(row["rubro"]), str(row["ambiente"]), str(row["proveedor"]), str(row["concepto"]), "Pendiente de detalle técnico..."))
+                                    
+                            conn_imp.commit()
+                            st.success(f"¡Se importaron {len(df_upload)} pagos con éxito y se actualizaron las especificaciones!")
+                            
+                        conn_imp.close()
+                        st.rerun()
+                except Exception as e:
+                    st.error(f"Ocurrió un error al procesar el archivo: {e}")
 
 else:
     # VISTA CLIENTE
