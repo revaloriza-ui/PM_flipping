@@ -267,9 +267,12 @@ if not st.session_state.authenticated:
         submit_login = st.form_submit_button("Ingresar")
         
         if submit_login:
-            # Claves fijas directas para evitar fallos
-            admin_pass = "admin2026"
-            client_pass = "cliente2026"
+            try:
+                admin_pass = st.secrets["auth"]["admin_password"]
+                client_pass = st.secrets["auth"]["client_password"]
+            except:
+                admin_pass = "admin2026"
+                client_pass = "cliente2026"
                 
             if password_input == admin_pass:
                 st.session_state.authenticated = True
