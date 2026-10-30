@@ -381,7 +381,6 @@ def agregar_pago(proyecto_id, presupuesto_id, fecha, comprobante, tipo_gasto, me
     conn = sqlite3.connect(DB_NAME)
     cursor = conn.cursor()
     
-    # Auto-sincronizar rubro y ambiente si no existen en los ABM
     cursor.execute("INSERT OR IGNORE INTO rubros (nombre) VALUES (?)", (rubro,))
     cursor.execute("INSERT OR IGNORE INTO ambientes (nombre) VALUES (?)", (ambiente,))
     
@@ -405,6 +404,14 @@ def eliminar_pago(pago_id):
     cursor = conn.cursor()
     cursor.execute("DELETE FROM especificaciones WHERE pago_id = ?", (pago_id,))
     cursor.execute("DELETE FROM pagos WHERE id = ?", (pago_id,))
+    conn.commit()
+    conn.close()
+
+def eliminar_todos_los_pagos(proyecto_id):
+    conn = sqlite3.connect(DB_NAME)
+    cursor = conn.cursor()
+    cursor.execute("DELETE FROM especificaciones WHERE proyecto_id = ?", (proyecto_id,))
+    cursor.execute("DELETE FROM pagos WHERE proyecto_id = ?", (proyecto_id,))
     conn.commit()
     conn.close()
 
@@ -1047,6 +1054,15 @@ if perfil == "Project Manager (Admin)":
         st.subheader("📥 Importar y Exportar Planillas (Presupuestos y Pagos)")
         st.markdown("Descargá las plantillas vacías, completalas en Excel y subilas para cargar masivamente los datos en el proyecto activo.")
         
+        # Botón de emergencia para vaciar pagos y reiniciar carga
+        st.markdown("---")
+        st.warning("⚠️ **Zona de Mantenimiento:** Si querés limpiar todos los pagos duplicados y empezar de cero con la importación, hacé clic acá:")
+        if st.button("🗑️ VACIAR TODA LA TABLA DE PAGOS"):
+            eliminar_todos_los_pagos(proyecto_id_activo)
+            st.success("¡Todos los pagos fueron eliminados con éxito! Ya podés reimportar tu planilla limpia.")
+            st.rerun()
+        st.markdown("---")
+
         imp_sub1, imp_sub2 = st.tabs(["📥 Descargar Plantillas", "📤 Subir / Importar Planillas"])
         
         with imp_sub1:
@@ -1126,7 +1142,6 @@ if perfil == "Project Manager (Admin)":
                                 r_val = str(row["rubro"])
                                 a_val = str(row["ambiente"])
                                 
-                                # Sincronizar automáticamente en las tablas de Rubros y Ambientes
                                 cursor_imp.execute("INSERT OR IGNORE INTO rubros (nombre) VALUES (?)", (r_val,))
                                 cursor_imp.execute("INSERT OR IGNORE INTO ambientes (nombre) VALUES (?)", (a_val,))
                                 
