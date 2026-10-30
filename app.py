@@ -150,6 +150,12 @@ def init_db():
         )
     """)
     cursor.execute("""
+        CREATE TABLE IF NOT EXISTS ambientes (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            nombre TEXT UNIQUE NOT NULL
+        )
+    """)
+    cursor.execute("""
         CREATE TABLE IF NOT EXISTS medios_pago (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             nombre TEXT UNIQUE NOT NULL,
@@ -227,6 +233,21 @@ def init_db():
         ]
         for r in rubros_iniciales:
             cursor.execute("INSERT OR IGNORE INTO rubros (nombre) VALUES (?)", (r,))
+        conn.commit()
+
+    cursor.execute("SELECT COUNT(*) FROM ambientes")
+    if cursor.fetchone()[0] == 0:
+        ambientes_iniciales = [
+            "Cocina",
+            "Baño 1",
+            "Baño 2",
+            "Toilette",
+            "Living y Pasillos",
+            "Balcón",
+            "General"
+        ]
+        for a in ambientes_iniciales:
+            cursor.execute("INSERT OR IGNORE INTO ambientes (nombre) VALUES (?)", (a,))
         conn.commit()
         
     cursor.execute("SELECT COUNT(*) FROM proveedores")
@@ -325,6 +346,18 @@ def get_rubros_df():
     conn.close()
     return df
 
+def get_ambientes():
+    conn = sqlite3.connect(DB_NAME)
+    df = pd.read_sql("SELECT * FROM ambientes", conn)
+    conn.close()
+    return df["nombre"].tolist()
+
+def get_ambientes_df():
+    conn = sqlite3.connect(DB_NAME)
+    df = pd.read_sql("SELECT * FROM ambientes", conn)
+    conn.close()
+    return df
+
 def get_medios_pago():
     conn = sqlite3.connect(DB_NAME)
     df = pd.read_sql("SELECT * FROM medios_pago", conn)
@@ -347,6 +380,11 @@ def agregar_pago(proyecto_id, presupuesto_id, fecha, comprobante, tipo_gasto, me
     monto_usd = int(monto_ars / tipo_cambio) if tipo_cambio > 0 else 0
     conn = sqlite3.connect(DB_NAME)
     cursor = conn.cursor()
+    
+    # Auto-sincronizar rubro y ambiente si no existen en los ABM
+    cursor.execute("INSERT OR IGNORE INTO rubros (nombre) VALUES (?)", (rubro,))
+    cursor.execute("INSERT OR IGNORE INTO ambientes (nombre) VALUES (?)", (ambiente,))
+    
     cursor.execute("""
         INSERT INTO pagos (proyecto_id, presupuesto_id, fecha, comprobante, tipo_gasto, medio_pago, cuotas, rubro, ambiente, proveedor, concepto, monto_ars, tipo_cambio, monto_usd) 
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -374,6 +412,10 @@ def actualizar_pago_completo(pago_id, presupuesto_id, fecha, comprobante, tipo_g
     monto_usd = int(monto_ars / tipo_cambio) if tipo_cambio > 0 else 0
     conn = sqlite3.connect(DB_NAME)
     cursor = conn.cursor()
+    
+    cursor.execute("INSERT OR IGNORE INTO rubros (nombre) VALUES (?)", (rubro,))
+    cursor.execute("INSERT OR IGNORE INTO ambientes (nombre) VALUES (?)", (ambiente,))
+    
     cursor.execute("""
         UPDATE pagos SET presupuesto_id = ?, fecha = ?, comprobante = ?, tipo_gasto = ?, medio_pago = ?, cuotas = ?, rubro = ?, ambiente = ?, proveedor = ?, concepto = ?, monto_ars = ?, tipo_cambio = ?, monto_usd = ? 
         WHERE id = ?
@@ -402,6 +444,8 @@ def get_presupuestos(proyecto_id):
 def guardar_presupuesto_rubro(proyecto_id, rubro, ambiente, proveedor, concepto, moneda, monto_presupuestado):
     conn = sqlite3.connect(DB_NAME)
     cursor = conn.cursor()
+    cursor.execute("INSERT OR IGNORE INTO rubros (nombre) VALUES (?)", (rubro,))
+    cursor.execute("INSERT OR IGNORE INTO ambientes (nombre) VALUES (?)", (ambiente,))
     cursor.execute("""
         INSERT INTO presupuestos_rubro (proyecto_id, rubro, ambiente, proveedor, concepto, moneda, monto_presupuestado) 
         VALUES (?, ?, ?, ?, ?, ?, ?)
@@ -412,6 +456,8 @@ def guardar_presupuesto_rubro(proyecto_id, rubro, ambiente, proveedor, concepto,
 def actualizar_presupuesto(ppto_id, rubro, ambiente, proveedor, concepto, moneda, monto_presupuestado):
     conn = sqlite3.connect(DB_NAME)
     cursor = conn.cursor()
+    cursor.execute("INSERT OR IGNORE INTO rubros (nombre) VALUES (?)", (rubro,))
+    cursor.execute("INSERT OR IGNORE INTO ambientes (nombre) VALUES (?)", (ambiente,))
     cursor.execute("""
         UPDATE presupuestos_rubro SET rubro = ?, ambiente = ?, proveedor = ?, concepto = ?, moneda = ?, monto_presupuestado = ? 
         WHERE id = ?
@@ -485,9 +531,9 @@ st.caption(f"Cliente / Inversor: {proyecto_info['cliente']} | Superficie: {sup_t
 
 # Definición de Pestañas según el Perfil
 if perfil == "Project Manager (Admin)":
-    tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab9, tab10, tab11 = st.tabs([
+    tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab9, tab10, tab11, tab12 = st.tabs([
         "💳 Registro de Pagos", "📐 Especificaciones", "📊 Módulo de Reportes", 
-        "🏢 ABM Proyectos", "📑 ABM Proveedores", "🛠️ ABM Rubros", 
+        "🏢 ABM Proyectos", "📑 ABM Proveedores", "🛠️ ABM Rubros", "🏠 ABM Ambientes",
         "💳 ABM Medios de Pago", "📋 ABM Presupuestos", "📈 Panel Financiero", "🚀 Escenarios Venta",
         "📥 Importar / Exportar"
     ])
@@ -837,7 +883,7 @@ if perfil == "Project Manager (Admin)":
                 rubro_sel = st.selectbox("Rubro", get_rubros(), label_visibility="collapsed")
             with col3:
                 st.markdown('<p class="field-title">🏠 Ambiente</p>', unsafe_allow_html=True)
-                ambiente_sel = st.selectbox("Ambiente", ["Cocina", "Baño 1", "Baño 2", "Toilette", "Living y Pasillos", "Balcón", "General"], label_visibility="collapsed")
+                ambiente_sel = st.selectbox("Ambiente", get_ambientes(), label_visibility="collapsed")
             with col4:
                 st.markdown('<p class="field-title">📑 Proveedor</p>', unsafe_allow_html=True)
                 proveedor_sel = st.selectbox("Proveedor", get_proveedores(), label_visibility="collapsed")
@@ -935,13 +981,13 @@ if perfil == "Project Manager (Admin)":
         st.dataframe(get_proveedores_df(), use_container_width=True)
 
     with tab6:
-        st.subheader("🛠️ ABM de Rubros")
+        st.subheader("🛠️ ABM de Rubros (Sincronizado con Pagos)")
         with st.form("form_nuevo_rubro", clear_on_submit=True):
             nuevo_cat = st.text_input("Nombre del Rubro", label_visibility="collapsed")
             if st.form_submit_button("➕ Agregar") and nuevo_cat:
                 conn_tmp = sqlite3.connect(DB_NAME)
                 cursor_tmp = conn_tmp.cursor()
-                cursor_tmp.execute("INSERT INTO rubros (nombre) VALUES (?)", (nuevo_cat,))
+                cursor_tmp.execute("INSERT OR IGNORE INTO rubros (nombre) VALUES (?)", (nuevo_cat,))
                 conn_tmp.commit()
                 conn_tmp.close()
                 st.success("¡Agregado!")
@@ -949,6 +995,20 @@ if perfil == "Project Manager (Admin)":
         st.dataframe(get_rubros_df(), use_container_width=True)
 
     with tab7:
+        st.subheader("🏠 ABM de Ambientes (Sincronizado con Pagos)")
+        with st.form("form_nuevo_ambiente", clear_on_submit=True):
+            nuevo_amb = st.text_input("Nombre del Ambiente", label_visibility="collapsed")
+            if st.form_submit_button("➕ Agregar Ambiente") and nuevo_amb:
+                conn_tmp = sqlite3.connect(DB_NAME)
+                cursor_tmp = conn_tmp.cursor()
+                cursor_tmp.execute("INSERT OR IGNORE INTO ambientes (nombre) VALUES (?)", (nuevo_amb,))
+                conn_tmp.commit()
+                conn_tmp.close()
+                st.success("¡Ambiente agregado!")
+                st.rerun()
+        st.dataframe(get_ambientes_df(), use_container_width=True)
+
+    with tab8:
         st.subheader("💳 ABM de Medios de Pago")
         with st.form("form_nuevo_mp", clear_on_submit=True):
             mp_nombre = st.text_input("Nombre Medio", label_visibility="collapsed")
@@ -964,12 +1024,12 @@ if perfil == "Project Manager (Admin)":
                 st.rerun()
         st.dataframe(get_medios_pago_df(), use_container_width=True)
 
-    with tab8:
+    with tab9:
         st.subheader("📋 ABM de Presupuestos")
         with st.form("form_pto_rubro", clear_on_submit=True):
             p_rubro = st.selectbox("Rubro Ppto", get_rubros(), label_visibility="collapsed")
             p_prov = st.selectbox("Proveedor Ppto", get_proveedores(), label_visibility="collapsed")
-            p_ambiente = st.selectbox("Ambiente Ppto", ["Cocina", "Baño 1", "Baño 2", "Toilette", "Living y Pasillos", "Balcón", "General"], label_visibility="collapsed")
+            p_ambiente = st.selectbox("Ambiente Ppto", get_ambientes(), label_visibility="collapsed")
             p_concepto = st.text_input("Concepto", value="Provisión y colocación", label_visibility="collapsed")
             p_moneda = st.selectbox("Moneda", ["ARS", "USD"], label_visibility="collapsed")
             p_monto = st.number_input("Monto", min_value=0, value=500000, step=10000, format="%d", label_visibility="collapsed")
@@ -979,11 +1039,11 @@ if perfil == "Project Manager (Admin)":
                 st.rerun()
         st.dataframe(get_presupuestos(proyecto_id_activo), use_container_width=True)
 
-    with tab9:
-        render_panel_financiero()
     with tab10:
-        render_escenarios_venta()
+        render_panel_financiero()
     with tab11:
+        render_escenarios_venta()
+    with tab12:
         st.subheader("📥 Importar y Exportar Planillas (Presupuestos y Pagos)")
         st.markdown("Descargá las plantillas vacías, completalas en Excel y subilas para cargar masivamente los datos en el proyecto activo.")
         
@@ -1040,18 +1100,22 @@ if perfil == "Project Manager (Admin)":
                         
                         if tipo_carga == "Presupuestos":
                             for idx, row in df_upload.iterrows():
+                                r_val = str(row["rubro"])
+                                a_val = str(row["ambiente"])
+                                cursor_imp.execute("INSERT OR IGNORE INTO rubros (nombre) VALUES (?)", (r_val,))
+                                cursor_imp.execute("INSERT OR IGNORE INTO ambientes (nombre) VALUES (?)", (a_val,))
+                                
                                 cursor_imp.execute("""
                                     INSERT INTO presupuestos_rubro (proyecto_id, rubro, ambiente, proveedor, concepto, moneda, monto_presupuestado)
                                     VALUES (?, ?, ?, ?, ?, ?, ?)
-                                """, (proyecto_id_activo, row["rubro"], row["ambiente"], row["proveedor"], row["concepto"], row["moneda"], int(row["monto_presupuestado"])))
+                                """, (proyecto_id_activo, r_val, a_val, row["proveedor"], row["concepto"], row["moneda"], int(row["monto_presupuestado"])))
                             conn_imp.commit()
-                            st.success(f"¡Se importaron {len(df_upload)} presupuestos con éxito!")
+                            st.success(f"¡Se importaron {len(df_upload)} presupuestos con éxito y se actualizaron los ABM!")
                             
                         elif tipo_carga == "Pagos":
                             for idx, row in df_upload.iterrows():
                                 p_id = int(row["presupuesto_id"]) if pd.notnull(row["presupuesto_id"]) and str(row["presupuesto_id"]).strip() != "" else None
                                 
-                                # Limpieza robusta de montos con comas o puntos
                                 m_ars_val = str(row["monto_ars"]).replace(",", "").replace(".", "").replace("$", "").strip()
                                 m_ars = int(float(m_ars_val)) if m_ars_val else 0
                                 
@@ -1059,6 +1123,12 @@ if perfil == "Project Manager (Admin)":
                                 tc = int(float(tc_val)) if tc_val and float(tc_val) > 0 else 1250
                                 
                                 m_usd = int(m_ars / tc) if tc > 0 else 0
+                                r_val = str(row["rubro"])
+                                a_val = str(row["ambiente"])
+                                
+                                # Sincronizar automáticamente en las tablas de Rubros y Ambientes
+                                cursor_imp.execute("INSERT OR IGNORE INTO rubros (nombre) VALUES (?)", (r_val,))
+                                cursor_imp.execute("INSERT OR IGNORE INTO ambientes (nombre) VALUES (?)", (a_val,))
                                 
                                 cursor_imp.execute("""
                                     INSERT INTO pagos (proyecto_id, presupuesto_id, fecha, comprobante, tipo_gasto, medio_pago, cuotas, rubro, ambiente, proveedor, concepto, monto_ars, tipo_cambio, monto_usd)
@@ -1071,8 +1141,8 @@ if perfil == "Project Manager (Admin)":
                                     str(row["tipo_gasto"]), 
                                     str(row["medio_pago"]), 
                                     int(row["cuotas"]), 
-                                    str(row["rubro"]), 
-                                    str(row["ambiente"]), 
+                                    r_val, 
+                                    a_val, 
                                     str(row["proveedor"]), 
                                     str(row["concepto"]), 
                                     m_ars, 
@@ -1088,15 +1158,15 @@ if perfil == "Project Manager (Admin)":
                                     """, (
                                         proyecto_id_activo, 
                                         new_pago_id, 
-                                        str(row["rubro"]), 
-                                        str(row["ambiente"]), 
+                                        r_val, 
+                                        a_val, 
                                         str(row["proveedor"]), 
                                         str(row["concepto"]), 
                                         "Pendiente de detalle técnico..."
                                     ))
                                     
                             conn_imp.commit()
-                            st.success(f"¡Se importaron {len(df_upload)} pagos con éxito y se actualizaron las especificaciones!")
+                            st.success(f"¡Se importaron {len(df_upload)} pagos con éxito y se actualizaron los ABM de Rubros y Ambientes!")
                             
                         conn_imp.close()
                         st.rerun()
