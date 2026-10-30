@@ -4,12 +4,16 @@ import sqlite3
 import pandas as pd
 import plotly.express as px
 import streamlit as st
+from streamlit_autorefresh import st_autorefresh
 
 # --- CONFIGURACIÓN DE PÁGINA Y ESTILOS CSS UNIFICADOS (ESTILO REVALORIZA) ---
 st.set_page_config(
     page_title="Gestión Flipping Multi-Proyecto",
     layout="wide"
 )
+
+# Mantener la app activa evitando que Streamlit Cloud la duerma por inactividad (refresco cada 10 min)
+st_autorefresh(interval=600000, limit=None, key="keepalive_counter")
 
 st.markdown("""  
 <style>
